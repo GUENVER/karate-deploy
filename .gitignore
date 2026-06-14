@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.astro/
+*.log
+# Secrets — ne jamais committer
+server/secure/config.php
+access.db*
+*.sqlite
