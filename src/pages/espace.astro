@@ -1,0 +1,175 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/tokens.css';
+---
+<Base title="Mes ressources — Lishan">
+  <header class="bar">
+    <div class="brand">Lishan <span>· espace adhérents</span></div>
+    <div class="right">
+      <span id="who" class="who"></span>
+      <button id="pwdBtn" class="link">Mot de passe</button>
+      <button id="out" class="link danger">Déconnexion</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="loading" class="state">Chargement de vos ressources…</div>
+    <div id="empty" class="state" hidden>
+      <h2>Aucune ressource pour le moment</h2>
+      <p class="muted">Votre compte n'a pas encore d'accès actif. Contactez l'école si cela vous semble incorrect.</p>
+    </div>
+    <div id="content" hidden>
+      <div class="head">
+        <h1 id="title">Mes ressources</h1>
+        <div id="filters" class="filters"></div>
+      </div>
+      <section id="grid" class="grid"></section>
+    </div>
+  </main>
+
+  <dialog id="viewer">
+    <button class="close" id="vClose" aria-label="Fermer">✕</button>
+    <div id="vBody"></div>
+  </dialog>
+
+  <dialog id="pwdDlg">
+    <form id="pwdForm" method="dialog">
+      <h2>Changer mon mot de passe</h2>
+      <label>Mot de passe actuel</label><input id="oldp" type="password" required />
+      <label>Nouveau mot de passe (8 caractères min.)</label><input id="newp" type="password" required minlength="8" />
+      <p id="pwdErr" class="err" hidden></p>
+      <div class="actions"><button value="cancel" class="btn ghost">Annuler</button>
+      <button id="pwdSave" value="ok" class="btn">Enregistrer</button></div>
+    </form>
+  </dialog>
+
+  <style>
+    .bar{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);
+      background:var(--c-surface);border-bottom:1px solid var(--c-line);position:sticky;top:0;z-index:5}
+    .brand{font-family:var(--ff-display);font-weight:600;font-size:var(--fs-h6);margin-right:auto}
+    .brand span{color:var(--c-muted);font-weight:400}
+    .right{display:flex;align-items:center;gap:var(--sp-4)}
+    .who{font-size:var(--fs-small);color:var(--c-muted)}
+    .link{background:none;border:none;color:var(--c-accent);font:inherit;font-size:var(--fs-small);cursor:pointer;padding:4px}
+    .link.danger{color:var(--c-danger)}
+    .wrap{max-width:var(--maxw);margin:0 auto;padding:var(--sp-7) var(--sp-5) var(--sp-9)}
+    .state{text-align:center;color:var(--c-muted);padding:var(--sp-9) var(--sp-4)}
+    .head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:var(--sp-4);margin-bottom:var(--sp-6)}
+    h1{font-size:var(--fs-h2)}
+    .filters{display:flex;gap:var(--sp-2);flex-wrap:wrap}
+    .filters button{border:1px solid var(--c-line);background:#fff;border-radius:999px;padding:6px 14px;
+      font:inherit;font-size:var(--fs-small);color:var(--c-muted);cursor:pointer}
+    .filters button.on{background:var(--c-accent);color:#fff;border-color:var(--c-accent)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:var(--sp-5)}
+    .item{background:var(--c-surface);border:1px solid var(--c-line);border-radius:var(--r-md);
+      overflow:hidden;box-shadow:var(--shadow);cursor:pointer;display:flex;flex-direction:column;text-align:left;
+      padding:0;font:inherit;color:inherit;transition:transform .15s ease, box-shadow .15s ease}
+    .item:hover{transform:translateY(-2px);box-shadow:0 1px 2px rgba(30,37,48,.05),0 16px 36px -18px rgba(30,37,48,.3)}
+    .thumb{aspect-ratio:16/9;background:#e7e3da;display:flex;align-items:center;justify-content:center;color:var(--c-muted)}
+    .thumb img{width:100%;height:100%;object-fit:cover}
+    .thumb .ic{font-size:var(--fs-h2);font-family:var(--ff-display)}
+    .meta{padding:var(--sp-4)}
+    .meta h3{font-family:var(--ff-body);font-size:var(--fs-body);font-weight:600;letter-spacing:0;margin:0 0 var(--sp-2)}
+    .pills{display:flex;gap:4px;flex-wrap:wrap}
+    .pill{font-size:var(--fs-caption);font-weight:600;padding:2px 8px;border-radius:999px;background:#e7e3da;color:var(--c-accent)}
+    .type{font-size:var(--fs-caption);color:var(--c-muted);text-transform:uppercase;letter-spacing:.06em}
+    dialog{border:none;border-radius:var(--r-lg);padding:0;max-width:min(960px,94vw);width:100%;box-shadow:0 30px 80px -20px rgba(0,0,0,.5)}
+    dialog::backdrop{background:rgba(20,24,31,.6)}
+    #viewer{background:#000}
+    #vBody iframe,#vBody embed{width:100%;height:min(76vh,540px);border:0;display:block}
+    .close{position:absolute;top:10px;right:12px;background:rgba(0,0,0,.55);color:#fff;border:none;
+      width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;z-index:2}
+    #pwdDlg{background:var(--c-surface);padding:var(--sp-6)}
+    #pwdDlg h2{font-size:var(--fs-h4);margin:0 0 var(--sp-4)}
+    #pwdDlg label{display:block;font-size:var(--fs-small);font-weight:600;margin:var(--sp-3) 0 var(--sp-1)}
+    #pwdDlg input{width:100%;padding:11px 13px;border:1px solid var(--c-line);border-radius:var(--r-sm);font:inherit}
+    .actions{display:flex;gap:var(--sp-3);justify-content:flex-end;margin-top:var(--sp-5)}
+    .btn{padding:10px 18px;border:none;border-radius:var(--r-sm);background:var(--c-accent);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+    .btn.ghost{background:#fff;color:var(--c-ink);border:1px solid var(--c-line)}
+    .err{background:#f6e7e7;border:1px solid #e0bcbc;color:var(--c-danger);padding:8px 12px;border-radius:var(--r-sm);font-size:var(--fs-small)}
+    .muted{color:var(--c-muted)}
+    @media (max-width:560px){.wrap{padding:var(--sp-5) var(--sp-4) var(--sp-8)}h1{font-size:var(--fs-h3)}}
+  </style>
+
+  <script>
+    const DNAME = {qigong:'Qigong', taichi:'Taïchi', kungfu:'Kungfu', qigong_enfant:'Enfants'};
+    let DATA = null, filter = 'all';
+
+    const $ = s => document.querySelector(s);
+    const ytThumb = id => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+
+    async function load(){
+      let d;
+      try { d = await (await fetch('/api/ressources.php')).json(); }
+      catch { location.href='/'; return; }
+      if (d.auth === false) { location.href='/'; return; }
+      DATA = d;
+      $('#who').textContent = d.nom || '';
+      $('#loading').hidden = true;
+      if (!d.ressources || !d.ressources.length){ $('#empty').hidden = false; return; }
+      $('#content').hidden = false;
+      buildFilters(d.disciplines);
+      render();
+    }
+
+    function buildFilters(slugs){
+      const box = $('#filters');
+      if (slugs.length < 2) return;
+      const mk = (val,lbl)=>{const b=document.createElement('button');b.textContent=lbl;b.dataset.v=val;
+        if(val===filter)b.classList.add('on');b.onclick=()=>{filter=val;[...box.children].forEach(c=>c.classList.toggle('on',c.dataset.v===val));render();};return b;};
+      box.appendChild(mk('all','Tout'));
+      slugs.forEach(s=>box.appendChild(mk(s, DNAME[s]||s)));
+    }
+
+    function render(){
+      const grid = $('#grid'); grid.innerHTML='';
+      const items = DATA.ressources.filter(r => filter==='all' || r.disciplines.some(d=>d.slug===filter));
+      for (const r of items){
+        const el = document.createElement('button'); el.className='item';
+        const isPdf = r.type==='pdf';
+        const thumb = (!isPdf && r.youtube_id)
+          ? `<div class="thumb"><img loading="lazy" src="${ytThumb(r.youtube_id)}" alt=""></div>`
+          : `<div class="thumb"><span class="ic">${isPdf?'PDF':'▷'}</span></div>`;
+        const pills = r.disciplines.map(d=>`<span class="pill">${DNAME[d.slug]||d.nom}</span>`).join('');
+        el.innerHTML = `${thumb}<div class="meta"><span class="type">${isPdf?'Document':(r.type==='playlist'?'Playlist':'Vidéo')}</span>
+          <h3>${escapeHtml(r.titre)}</h3><div class="pills">${pills}</div></div>`;
+        el.onclick = ()=>openViewer(r);
+        grid.appendChild(el);
+      }
+    }
+
+    function openViewer(r){
+      const body = $('#vBody');
+      if (r.type==='pdf' && r.pdf_path){
+        body.innerHTML = `<embed src="${r.pdf_path}" type="application/pdf">`;
+      } else if (r.type==='playlist' && r.youtube_id){
+        body.innerHTML = `<iframe src="https://www.youtube.com/embed/videoseries?list=${r.youtube_id}" allowfullscreen></iframe>`;
+      } else if (r.youtube_id){
+        body.innerHTML = `<iframe src="https://www.youtube.com/embed/${r.youtube_id}?rel=0" allowfullscreen></iframe>`;
+      } else {
+        body.innerHTML = `<div style="padding:40px;color:#fff;text-align:center">Ressource indisponible.</div>`;
+      }
+      $('#viewer').showModal();
+    }
+
+    function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+    $('#vClose').onclick = ()=>{ $('#viewer').close(); $('#vBody').innerHTML=''; };
+    $('#viewer').addEventListener('close', ()=>{ $('#vBody').innerHTML=''; });
+    $('#out').onclick = async ()=>{ await fetch('/api/auth.php?action=logout'); location.href='/'; };
+
+    $('#pwdBtn').onclick = ()=> $('#pwdDlg').showModal();
+    $('#pwdForm').addEventListener('submit', async (e)=>{
+      if (e.submitter && e.submitter.value==='cancel') return;
+      e.preventDefault();
+      const er = $('#pwdErr'); er.hidden=true;
+      const r = await fetch('/api/auth.php?action=change-pwd',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({old:$('#oldp').value, new:$('#newp').value})});
+      const d = await r.json();
+      if (d.ok){ $('#pwdDlg').close(); $('#oldp').value=$('#newp').value=''; alert('Mot de passe modifié.'); }
+      else { er.textContent=d.err||'Erreur.'; er.hidden=false; }
+    });
+
+    load();
+  </script>
+</Base>
