@@ -1,0 +1,57 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/tokens.css';
+---
+<Base title="Connexion — Espace adhérents Lishan">
+  <main class="auth">
+    <div class="card">
+      <p class="eyebrow">École Lishan</p>
+      <h1>Espace adhérents</h1>
+      <p class="sub">Accédez à vos vidéos et documents selon vos disciplines.</p>
+      <form id="f" novalidate>
+        <label for="email">Adresse e-mail</label>
+        <input id="email" type="email" autocomplete="username" required autofocus />
+        <label for="pwd">Mot de passe</label>
+        <input id="pwd" type="password" autocomplete="current-password" required />
+        <p id="err" class="err" hidden></p>
+        <button class="btn" type="submit">Se connecter</button>
+      </form>
+      <p class="help">Un souci de connexion ? Contactez l'école.</p>
+    </div>
+    <div class="aside" aria-hidden="true"><div class="mark">気</div></div>
+  </main>
+  <style>
+    .auth{min-height:100dvh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
+    .card{display:flex;flex-direction:column;justify-content:center;max-width:420px;width:100%;margin-left:auto;padding:var(--sp-8) var(--sp-7)}
+    .eyebrow{font-size:var(--fs-small);letter-spacing:.14em;text-transform:uppercase;color:var(--c-muted);margin:0 0 var(--sp-2)}
+    h1{font-size:var(--fs-h1);margin:0 0 var(--sp-3)}
+    .sub{color:var(--c-muted);margin:0 0 var(--sp-6)}
+    label{display:block;font-size:var(--fs-small);font-weight:600;margin:var(--sp-4) 0 var(--sp-1)}
+    input{width:100%;padding:12px 14px;border:1px solid var(--c-line);border-radius:var(--r-sm);background:#fff;font:inherit}
+    input:focus{outline:2px solid #cfd6df;border-color:var(--c-accent)}
+    .btn{margin-top:var(--sp-6);width:100%;padding:13px;border:none;border-radius:var(--r-sm);background:var(--c-accent);color:var(--c-accent-ink);font:inherit;font-weight:600;cursor:pointer}
+    .btn:hover{background:#3a4658}
+    .btn:disabled{opacity:.6;cursor:wait}
+    .err{background:#f6e7e7;border:1px solid #e0bcbc;color:var(--c-danger);padding:9px 12px;border-radius:var(--r-sm);font-size:var(--fs-small);margin:var(--sp-4) 0 0}
+    .help{margin-top:var(--sp-6);font-size:var(--fs-small);color:var(--c-muted)}
+    .aside{background:var(--c-accent);display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .mark{font-family:var(--ff-display);font-size:42vh;color:rgba(255,255,255,.06);user-select:none;line-height:1;transform:translateY(-2%)}
+    @media (max-width:820px){.auth{grid-template-columns:1fr}.aside{display:none}.card{margin:0 auto;padding:var(--sp-8) var(--sp-5)}}
+  </style>
+  <script>
+    const f = document.getElementById('f');
+    const err = document.getElementById('err');
+    const btn = f.querySelector('button');
+    fetch('/api/auth.php').then(r=>r.json()).then(d=>{ if(d.auth) location.href='/espace'; }).catch(()=>{});
+    f.addEventListener('submit', async (e)=>{
+      e.preventDefault(); err.hidden=true; btn.disabled=true; btn.textContent='Connexion…';
+      try{
+        const r = await fetch('/api/auth.php?action=login',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: email.value.trim(), pwd: pwd.value }) });
+        const d = await r.json();
+        if(d.ok){ location.href='/espace'; return; }
+        err.textContent = d.err || 'Connexion impossible.'; err.hidden=false;
+      }catch{ err.textContent='Erreur réseau. Réessayez.'; err.hidden=false; }
+      btn.disabled=false; btn.textContent='Se connecter';
+    });
+  </script>
+</Base>

@@ -1,0 +1,28 @@
+---
+// Base.astro — gabarit commun (PWA-ready)
+const { title = "Espace adhérents — Lishan" } = Astro.props;
+---
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{title}</title>
+  <meta name="description" content="Espace adhérents de l'école Lishan — ressources vidéo et documents protégés." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#f2f0eb" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+</head>
+<body>
+  <slot />
+  <script is:inline>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+    }
+  </script>
+</body>
+</html>
