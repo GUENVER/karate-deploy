@@ -1,6 +1,6 @@
 #!/bin/bash
 # Certificats Let's Encrypt (acme.sh, validation HTTP) installés dans cPanel via UAPI.
-# Usage : ssl.sh issue <domaine> <docroot>   -> émet et installe
+# Usage : ssl.sh issue <domaine[,alias]> <docroot>   -> émet et installe (un seul certificat pour tous les noms)
 #         ssl.sh renew                        -> renouvelle et réinstalle ce qui a changé (cron)
 set -e
 HOME="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
@@ -19,8 +19,10 @@ install_cert(){
 }
 case "$1" in
   issue)
-    "$A/acme.sh" --home "$A" --issue -d "$2" -w "$3" --keylength ec-256 || [ $? -eq 2 ]
-    install_cert "$2" ;;
+    MAIN="${2%%,*}"; ARGS=""
+    for N in ${2//,/ }; do ARGS="$ARGS -d $N"; done
+    "$A/acme.sh" --home "$A" --issue $ARGS -w "$3" --keylength ec-256 || [ $? -eq 2 ]
+    install_cert "$MAIN" ;;
   renew)
     for D in "$A"/*_ecc; do
       DOM=$(basename "$D" _ecc)
