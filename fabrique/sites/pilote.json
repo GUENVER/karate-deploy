@@ -1,0 +1,44 @@
+[
+  {
+    "host": "jardin.decouverte.org", "sub": "jardin", "root": "decouverte.org",
+    "name": "Jardin Découverte", "tagline": "Le potager et le jardin, simplement", "color": "#2f7d32", "per_day": 3,
+    "niche": "Jardinage et potager en France pour débutants et jardiniers amateurs : calendrier des semis et plantations par mois, légumes, arbres fruitiers, fleurs, entretien, maladies et parasites, compost, outils, jardinage au naturel.",
+    "seeds": ["potager débutant", "quand planter", "maladie tomate", "tailler arbre fruitier", "compost", "semis", "pucerons", "gazon", "haie", "jardinière balcon"],
+    "categories": ["Potager", "Arbres fruitiers", "Fleurs et massifs", "Entretien du jardin", "Maladies et parasites", "Outils et équipement"]
+  },
+  {
+    "host": "maison.decouverte.org", "sub": "maison", "root": "decouverte.org",
+    "name": "Maison Découverte", "tagline": "Bricolage, entretien et astuces pour la maison", "color": "#8a4b0f", "per_day": 3,
+    "niche": "Bricolage, rénovation, entretien et astuces ménagères pour particuliers en France : réparations courantes, peinture, plomberie simple, électricité de base (sécurité), isolation, nettoyage, rangement, économies d'énergie, outillage.",
+    "seeds": ["comment réparer", "enlever tache", "déboucher", "peindre", "fuite", "moisissure", "joint", "perceuse", "économiser chauffage", "nettoyer"],
+    "categories": ["Bricolage", "Réparations", "Entretien et ménage", "Peinture et déco", "Économies d'énergie", "Outillage"]
+  },
+  {
+    "host": "animaux.decouverte.org", "sub": "animaux", "root": "decouverte.org",
+    "name": "Animaux Découverte", "tagline": "Chiens, chats et NAC : bien les comprendre", "color": "#b5541b", "per_day": 3,
+    "niche": "Animaux de compagnie en France : chiens, chats, lapins, NAC, oiseaux. Races, comportement, éducation, alimentation, accessoires, bien-être. Pour la santé : conseils généraux prudents et renvoi systématique vers le vétérinaire.",
+    "seeds": ["chien qui", "chat qui", "race de chien", "éducation chiot", "croquettes", "chaton", "lapin nain", "litière", "chien seul maison", "poisson rouge"],
+    "categories": ["Chiens", "Chats", "Lapins et NAC", "Oiseaux et poissons", "Éducation et comportement", "Alimentation et accessoires"]
+  },
+  {
+    "host": "recettes.decouverte.org", "sub": "recettes", "root": "decouverte.org",
+    "name": "Recettes Découverte", "tagline": "Cuisine facile du quotidien", "color": "#c0392b", "per_day": 3,
+    "niche": "Cuisine française facile du quotidien : recettes rapides, de saison, familiales, petits budgets, desserts, techniques de base, conservation des aliments, astuces de cuisine, équivalences et conversions.",
+    "seeds": ["recette facile", "recette rapide", "combien de temps cuire", "remplacer", "conserver", "dessert facile", "recette avec", "gâteau", "soupe", "sauce"],
+    "categories": ["Plats", "Desserts", "Entrées et soupes", "Techniques et astuces", "Recettes de saison", "Petits budgets"]
+  },
+  {
+    "host": "balades.normandie.me", "sub": "balades", "root": "normandie.me",
+    "name": "Balades Normandie", "tagline": "Randonnées, plages et villages de Normandie", "color": "#1f5f8b", "per_day": 2,
+    "niche": "Tourisme en Normandie (Calvados, Manche, Orne, Eure, Seine-Maritime) : randonnées, plages, villages, patrimoine, D-Day et sites historiques, week-ends, activités en famille, gastronomie normande, que faire selon la saison. Informations pratiques sans inventer d'horaires ni de tarifs précis.",
+    "seeds": ["que faire en normandie", "randonnée calvados", "plage normandie", "plus beaux villages normandie", "mont saint michel", "plages du débarquement", "week-end normandie", "étretat", "honfleur", "suisse normande"],
+    "categories": ["Randonnées", "Plages et côtes", "Villages et patrimoine", "Histoire et D-Day", "Week-ends et idées de sorties", "Gastronomie normande"]
+  },
+  {
+    "host": "www.art-martial.org", "alias": ["art-martial.org"],
+    "name": "Art Martial", "tagline": "Arts martiaux et arts énergétiques chinois", "color": "#7a1f1f", "per_day": 2,
+    "niche": "Arts martiaux et arts énergétiques : kung-fu, tai chi chuan, qi gong, karaté, judo, arts martiaux chinois traditionnels, histoire, styles, techniques, entraînement, équipement, bienfaits (sans promesse médicale), conseils pour débuter.",
+    "seeds": ["qi gong débutant", "tai chi bienfaits", "kung fu styles", "karaté ceinture", "quel art martial choisir", "self défense", "échauffement arts martiaux", "kimono", "méditation debout", "shaolin"],
+    "categories": ["Kung-fu et arts chinois", "Tai chi et qi gong", "Karaté et arts japonais", "Débuter", "Entraînement", "Équipement"]
+  }
+]
