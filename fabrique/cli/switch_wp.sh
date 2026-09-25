@@ -21,6 +21,7 @@ Options -Indexes +SymLinksIfOwnerMatch
 <IfModule mod_rewrite.c>
 RewriteEngine On
 RewriteCond %{HTTPS} off
+RewriteCond %{REQUEST_URI} !^/\.well-known/
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 RewriteRule .* - [E=HTTP_X_FABRIQUE_TOKEN:%{HTTP:X-Fabrique-Token}]
 RewriteRule ^fabrique\.php$ - [L]
