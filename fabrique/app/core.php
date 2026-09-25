@@ -40,6 +40,8 @@ function registry(): PDO
     CREATE TABLE IF NOT EXISTS aliases(alias TEXT PRIMARY KEY, host TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
     CREATE TABLE IF NOT EXISTS log(id INTEGER PRIMARY KEY, at TEXT, host TEXT, kind TEXT, msg TEXT);");
+    $cols = array_column($db->query('PRAGMA table_info(sites)')->fetchAll(), 'name');
+    if (!in_array('jobs', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN jobs INTEGER DEFAULT 0');
     return $db;
 }
 

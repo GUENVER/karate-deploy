@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/app/core.php';
 require dirname(__DIR__) . '/app/render.php';
 require dirname(__DIR__) . '/app/feeds.php';
+require dirname(__DIR__) . '/app/jobs.php';
 
 $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
@@ -28,6 +29,7 @@ switch ($path) {
     case '/' . indexnow_key() . '.txt': header('Content-Type: text/plain'); echo indexnow_key(); exit;
 }
 if (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) { out_sitemap_posts($site, (int)$m[1]); exit; }
+if ($site['jobs'] && preg_match('#^/sitemap-jobs-(\d+)\.xml$#', $path, $m)) { out_sitemap_jobs($site, (int)$m[1]); exit; }
 if (preg_match('#^/(wp-admin|wp-login\.php|xmlrpc\.php|wp-json)#', $path)) { http_response_code(410); exit; }
 
 if ($site['status'] === 'paused' && !isset($_COOKIE['fab_admin'])) { http_response_code(503); header('Retry-After: 3600'); echo 'Maintenance.'; exit; }
@@ -40,7 +42,7 @@ if (!is_bot() && $_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($path === '/recherche/' || $path === '/recherche') { echo page_search($site, (string)($_GET['q'] ?? '')); exit; }
 
 // Cache HTML (vidé à chaque publication).
-$ckey = cache_dir($site['host']) . '/' . md5($path) . '.html';
+$ckey = cache_dir($site['host']) . '/' . md5($path . '?' . ($_GET['contrat'] ?? '')) . '.html';
 if (is_file($ckey) && filemtime($ckey) > time() - 86400) { header('Content-Type: text/html; charset=utf-8'); header('X-Cache: HIT'); readfile($ckey); count_view($site, $path); exit; }
 
 $html = route($site, $path);
@@ -64,6 +66,14 @@ function route(array $site, string $path): ?string
     if (preg_match('#^/page/(\d+)/?$#', $path, $m)) return page_home($site, (int)$m[1]);
     if (preg_match('#^/category/(?:[^/]+/)*([^/]+)/(?:page/(\d+)/?)?$#', $path, $m)) return page_category($site, $m[1], (int)($m[2] ?? 1) ?: 1);
     if (preg_match('#^/(a-propos|contact|mentions-legales|confidentialite)/?$#', $path, $m)) return page_static($site, $m[1]);
+    if (!empty($site['jobs'])) {
+        if ($path === '/offres-emploi/') return page_jobs_home($site);
+        if (preg_match('#^/offres-emploi/([a-z\-]+)/(?:page/(\d+)/)?$#', $path, $m) && ($reg = region_by_slug($m[1]))) {
+            $c = (string)($_GET['contrat'] ?? '');
+            return page_jobs_region($site, $reg, max(1, (int)($m[2] ?? 1)), isset(JOB_CONTRACTS[$c]) ? $c : '');
+        }
+        if (preg_match('#^/offre/([a-z0-9\-]+)/$#', $path, $m)) return page_job($site, $m[1]);
+    }
 
     $db = site_db($site['host']);
     $norm = rtrim($path, '/') . '/';

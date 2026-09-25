@@ -57,6 +57,7 @@ function layout(array $site, array $m, string $body): string
     if ($ga = setting('ga4_id', '')) $head .= '<script async src="https://www.googletagmanager.com/gtag/js?id=' . h($ga) . '"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","' . h($ga) . '");</script>';
 
     $nav = '';
+    if (!empty($site['jobs'])) $nav .= '<a href="/offres-emploi/"><strong>Offres d\'emploi</strong></a>';
     foreach (array_slice(site_categories($site), 0, 7) as $c) $nav .= '<a href="/category/' . h($c['slug']) . '/">' . h($c['name']) . '</a>';
     $parts = explode(' ', $site['name'], 2);
     $logo = h($parts[0]) . (isset($parts[1]) ? ' <span>' . h($parts[1]) . '</span>' : '');

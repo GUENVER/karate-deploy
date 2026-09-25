@@ -22,6 +22,7 @@ function out_sitemap_index(array $site): void
     echo '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
     echo '<sitemap><loc>https://' . $site['host'] . '/sitemap-pages.xml</loc></sitemap>';
     for ($i = 1; $i <= max(1, (int)ceil($n / 1000)); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-posts-$i.xml</loc></sitemap>";
+    if (!empty($site['jobs'])) for ($i = 1; $i <= jobs_sitemap_count($site); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-jobs-$i.xml</loc></sitemap>";
     echo '</sitemapindex>';
 }
 

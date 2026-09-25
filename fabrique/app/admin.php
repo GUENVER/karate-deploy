@@ -106,7 +106,7 @@ function admin_site_form(?array $s): void
             'name' => trim($f['name'] ?? ''), 'tagline' => trim($f['tagline'] ?? ''), 'niche' => trim($f['niche'] ?? ''),
             'color' => $f['color'] ?? '#0b6e4f', 'per_day' => max(0, (float)($f['per_day'] ?? 3)), 'min_words' => max(300, (int)($f['min_words'] ?? 1200)),
             'seeds' => trim($f['seeds'] ?? ''), 'adsense' => isset($f['adsense']) ? 1 : 0, 'amazon' => isset($f['amazon']) ? 1 : 0,
-            'gen' => isset($f['gen']) ? 1 : 0, 'ymyl' => isset($f['ymyl']) ? 1 : 0, 'permalink' => trim($f['permalink'] ?? '/%slug%/') ?: '/%slug%/', 'lang' => 'fr',
+            'gen' => isset($f['gen']) ? 1 : 0, 'ymyl' => isset($f['ymyl']) ? 1 : 0, 'jobs' => isset($f['jobs']) ? 1 : 0, 'permalink' => trim($f['permalink'] ?? '/%slug%/') ?: '/%slug%/', 'lang' => 'fr',
         ];
         if (!preg_match('/^[a-z0-9\-]+(\.[a-z0-9\-]+)+$/', $host) || $data['name'] === '') $msg = '<p class="err">Hôte ou nom invalide.</p>';
         elseif ($s) {
@@ -138,7 +138,7 @@ function admin_site_form(?array $s): void
         . '<label>Mots-clés graines (un par ligne : l\'IA et Google Suggest partent de là)<textarea name="seeds" placeholder="potager débutant&#10;quand planter tomates&#10;compost maison">' . $v('seeds') . '</textarea></label>'
         . ($s ? '' : '<label>Rubriques (séparées par des virgules, optionnel : l\'IA en crée sinon)<input name="categories" value="' . $v('categories') . '" placeholder="Potager, Fleurs, Outils, Calendrier"></label>')
         . '<div class="row"><label>Articles IA par jour<input type="number" step="0.5" min="0" name="per_day" value="' . $v('per_day', '3') . '"></label><label>Longueur cible (mots)<input type="number" name="min_words" value="' . $v('min_words', '1200') . '"></label><label>Permaliens<input name="permalink" value="' . $v('permalink', '/%slug%/') . '"></label></div>'
-        . '<p><label class="inline"><input type="checkbox" name="gen" ' . $ck('gen') . ' style="width:auto"> Génération IA automatique</label> &nbsp; <label class="inline"><input type="checkbox" name="adsense" ' . $ck('adsense') . ' style="width:auto"> AdSense</label> &nbsp; <label class="inline"><input type="checkbox" name="amazon" ' . $ck('amazon') . ' style="width:auto"> Affiliation Amazon</label> &nbsp; <label class="inline"><input type="checkbox" name="ymyl" ' . $ck('ymyl', 0) . ' style="width:auto"> Thème sensible (santé/argent : ton prudent, sources officielles)</label></p>'
+        . '<p><label class="inline"><input type="checkbox" name="gen" ' . $ck('gen') . ' style="width:auto"> Génération IA automatique</label> &nbsp; <label class="inline"><input type="checkbox" name="adsense" ' . $ck('adsense') . ' style="width:auto"> AdSense</label> &nbsp; <label class="inline"><input type="checkbox" name="amazon" ' . $ck('amazon') . ' style="width:auto"> Affiliation Amazon</label> &nbsp; <label class="inline"><input type="checkbox" name="jobs" ' . $ck('jobs', 0) . ' style="width:auto"> Agrégateur d\'offres d\'emploi</label> &nbsp; <label class="inline"><input type="checkbox" name="ymyl" ' . $ck('ymyl', 0) . ' style="width:auto"> Thème sensible (santé/argent : ton prudent, sources officielles)</label></p>'
         . '<button>' . ($s ? 'Enregistrer' : 'Créer le site') . '</button></form>');
 }
 
@@ -210,7 +210,9 @@ function admin_settings(): void
 {
     $keys = ['adsense_pub' => 'Éditeur AdSense (ca-pub-…)', 'adsense_slot_in_article' => 'ID de bloc AdSense « in-article » (optionnel, sinon annonces automatiques seules)',
         'amazon_tag' => 'Identifiant partenaire Amazon (ex. monsite-21)', 'ga4_id' => 'Google Analytics 4 (G-…, optionnel)', 'contact_email' => 'E-mail de contact affiché',
-        'editor_name' => 'Nom de l\'éditeur (mentions légales)', 'ads_txt_extra' => 'Lignes ads.txt supplémentaires (autres régies)'];
+        'editor_name' => 'Nom de l\'éditeur (mentions légales)', 'ads_txt_extra' => 'Lignes ads.txt supplémentaires (autres régies)',
+        'ft_client_id' => 'Offres d\'emploi — France Travail : identifiant client (francetravail.io)', 'ft_client_secret' => 'Offres d\'emploi — France Travail : clé secrète',
+        'adzuna_app_id' => 'Offres d\'emploi — Adzuna : app_id (developer.adzuna.com)', 'adzuna_app_key' => 'Offres d\'emploi — Adzuna : app_key'];
     $msg = '';
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($keys as $k => $_) setting_set($k, trim((string)($_POST[$k] ?? '')));
