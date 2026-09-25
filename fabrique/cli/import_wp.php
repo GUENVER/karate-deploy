@@ -9,6 +9,7 @@ require dirname(__DIR__) . '/app/api.php';
 
 [$_, $host, $src] = $argv + [null, null, null];
 $dedupe = in_array('--dedupe', $argv, true);
+if (function_exists('proc_nice')) @proc_nice(19);
 if (!$host || !$src) { fwrite(STDERR, "usage: import_wp.php host src [--dedupe]\n"); exit(1); }
 $site = site_by_host($host) ?: exit("site $host absent du registre\n");
 $db = site_db($site['host']);

@@ -6,6 +6,10 @@ if (PHP_SAPI !== 'cli') exit;
 require dirname(__DIR__) . '/app/core.php';
 require dirname(__DIR__) . '/app/api.php';
 
+// Ménage les ressources du compte mutualisé (limites LVE) : priorité basse, une seule instance, pauses.
+if (function_exists('proc_nice')) @proc_nice(19);
+$lock = fopen(cfg('data_dir') . '/localize.lock', 'c');
+if (!flock($lock, LOCK_EX | LOCK_NB)) exit("déjà en cours\n");
 $site = site_by_host($argv[1] ?? '') ?: exit("site inconnu\n");
 $limit = (int)(preg_filter('/^--limit=/', '', implode(' ', array_slice($argv, 2))) ?: 100000);
 $db = site_db($site['host']);
@@ -18,6 +22,7 @@ foreach ($rows as $p) {
     $content = preg_replace_callback('#<img\b[^>]*?\bsrc="(https?://[^"]+)"[^>]*>#i', function ($m) use ($site, $p, $own, &$i, &$ok, &$dead) {
         $url = html_entity_decode($m[1]);
         if (preg_match("#^https?://(www\\.)?$own/#i", $url)) return $m[0];
+        usleep(1500000);
         $local = fetch_image($site, $url, $p['slug'] . '-' . (++$i));
         if (!$local) { $dead++; return ''; }
         $ok++;
@@ -30,6 +35,7 @@ foreach ($rows as $p) {
         if (!$image && preg_match('#<img src="(/_m/[^"]+)"#', $content, $mm)) $image = $mm[1];
     }
     $db->prepare('UPDATE posts SET content=?, image=? WHERE id=?')->execute([$content, $image, $p['id']]);
+    usleep(500000);
 }
 cache_clear($site['host']);
 echo "$n articles traités, $ok images rapatriées, $dead mortes retirées\n";
