@@ -56,9 +56,12 @@ for ($pg = 1; ; $pg++) {
     foreach ($posts as $p) {
         $title = trim(html_entity_decode(strip_tags($p['title']['rendered']), ENT_QUOTES, 'UTF-8'));
         $path = parse_url($p['link'], PHP_URL_PATH) ?: '/' . $p['slug'] . '/';
-        $sig = topic_sig(preg_replace('/-\d+$/', '', $p['slug']) . ' ' . $title);
-        if ($dedupe && isset($seen[$sig])) { $redir->execute([$path, $seen[$sig]]); $dups++; continue; }
-        $seen[$sig] = $path;
+        // doublon = même slug de base (sans suffixe -N) ou même titre normalisé
+        $keys = ['s:' . preg_replace('/-\d+$/', '', $p['slug']), 't:' . topic_sig($title)];
+        if ($dedupe) {
+            foreach ($keys as $k) if (isset($seen[$k])) { $redir->execute([$path, $seen[$k]]); $dups++; continue 2; }
+        }
+        foreach ($keys as $k) $seen[$k] = $path;
         $y = $p['yoast_head_json'] ?? [];
         $content = (string)$p['content']['rendered'];
         $content = preg_replace('#<script[^>]*>.*?</script>#is', '', $content);
