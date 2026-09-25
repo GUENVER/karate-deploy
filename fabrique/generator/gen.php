@@ -167,7 +167,12 @@ function http_json(string $url, array $headers = []): ?array
 function find_image(string $q): array
 {
     global $CFG;
-    $k = $CFG['apis'] ?? [];
+    // clés du hub : chaîne ou tableau {key|access_key, enabled}
+    $k = [];
+    foreach ((array)($CFG['apis'] ?? []) as $name => $v) {
+        if (is_array($v)) $v = !empty($v['enabled']) || !isset($v['enabled']) ? (string)($v['key'] ?? $v['access_key'] ?? '') : '';
+        $k[$name] = (string)$v;
+    }
     $q = trim(mb_substr($q, 0, 60));
     if (!empty($k['pexels'])) {
         $r = http_json('https://api.pexels.com/v1/search?per_page=15&orientation=landscape&query=' . rawurlencode($q), ['Authorization: ' . $k['pexels']]);
