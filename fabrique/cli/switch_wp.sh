@@ -3,6 +3,8 @@
 # Usage : switch_wp.sh <docroot>          -> bascule
 #         switch_wp.sh <docroot> --revert -> retour à WordPress
 set -e
+HOME="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
+[ -n "$HOME" ] || { echo "HOME introuvable"; exit 1; }
 D="${1%/}"
 [ -d "$D" ] || { echo "docroot introuvable"; exit 1; }
 if [ "$2" = "--revert" ]; then

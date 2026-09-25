@@ -2,8 +2,11 @@
 # Installe / met à jour la fabrique depuis GitHub sur le compte cPanel courant (config.php et data/ conservés).
 set -e
 BRANCH="${1:-claude/adsense-sites-network-analysis-bmtqb7}"
-DEST="$HOME/fabrique"
-mkdir -p "$DEST" && cd "$DEST"
+H="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
+[ -n "$H" ] || { echo "HOME introuvable"; exit 1; }
+DEST="$H/fabrique"
+mkdir -p "$DEST"
+cd "$DEST"
 curl -sfL "https://codeload.github.com/guenver/karate-deploy/tar.gz/refs/heads/$BRANCH" \
   | tar xz --strip-components=2 --wildcards '*/fabrique/*'
 mkdir -p data public/_m && chmod 750 data
