@@ -7,8 +7,8 @@ HOME="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
 export HOME
 A="$HOME/.acme.sh"
 if [ ! -x "$A/acme.sh" ]; then
-  T=$(mktemp -d); curl -sfL https://github.com/acmesh-official/acme.sh/archive/master.tar.gz | tar xz -C "$T"
-  (cd "$T"/acme.sh-master && ./acme.sh --install --home "$A" --nocron --accountemail "contact@guenver.com" >/dev/null)
+  T="$HOME/.acme-install"; rm -rf "$T"; mkdir -p "$T"; curl -sfL https://github.com/acmesh-official/acme.sh/archive/master.tar.gz | tar xz -C "$T"
+  (cd "$T"/acme.sh-master && sh ./acme.sh --install --home "$A" --nocron --accountemail "contact@guenver.com" >/dev/null)
   rm -rf "$T"
   "$A/acme.sh" --home "$A" --set-default-ca --server letsencrypt >/dev/null
 fi
