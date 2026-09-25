@@ -98,7 +98,7 @@ function ft_fetch(string $token, string $region, int $max = 300): array
     return $out;
 }
 
-function adzuna_fetch(string $region, int $pages = 2): array
+function adzuna_fetch(string $region, int $pages = 1): array // plan gratuit : ~250 appels/jour → 18 régions × 1 page × 8 synchros
 {
     $id = setting('adzuna_app_id', ''); $key = setting('adzuna_app_key', '');
     if ($id === '' || $key === '') return [];
