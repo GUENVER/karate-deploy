@@ -63,6 +63,8 @@ function api_jobs(int $limit, ?string $only): array
         $meta['recent_titles'] = $db->query("SELECT title FROM posts WHERE status='publish' ORDER BY published_at DESC LIMIT 40")->fetchAll(PDO::FETCH_COLUMN);
         $jobs[] = ['type' => 'article', 'site' => $meta, 'topic' => $t];
         $gap = 86400 / max(0.1, (float)$s['per_day']) * (0.6 + mt_rand() / mt_getrandmax() * 0.8);
+        // amorçage : un site neuf reçoit ses 10 premiers articles rapidement (~1 toutes les 30 min)
+        if ((int)$db->query("SELECT COUNT(*) FROM posts WHERE status='publish'")->fetchColumn() < 10) $gap = min($gap, 1200 + mt_rand(0, 1200));
         registry()->prepare('UPDATE sites SET next_gen_at=? WHERE id=?')->execute([gmdate('Y-m-d H:i:s', time() + (int)$gap), $s['id']]);
     }
     return ['jobs' => $jobs];
