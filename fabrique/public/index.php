@@ -48,8 +48,10 @@ if (is_file($ckey) && filemtime($ckey) > time() - 86400) { header('Content-Type:
 $html = route($site, $path);
 if ($html === null) exit; // redirection déjà envoyée
 if ($html === '') { http_response_code(404); echo page_404($site); exit; }
-if (!is_dir(dirname($ckey))) @mkdir(dirname($ckey), 0750, true);
-@file_put_contents($ckey, $html, LOCK_EX);
+if ((int)http_response_code() === 200) { // on ne met en cache que les pages 200 (pas les 410 d'offres expirées)
+    if (!is_dir(dirname($ckey))) @mkdir(dirname($ckey), 0750, true);
+    @file_put_contents($ckey, $html, LOCK_EX);
+}
 header('Content-Type: text/html; charset=utf-8');
 echo $html;
 count_view($site, $path);
@@ -64,7 +66,7 @@ function route(array $site, string $path): ?string
 {
     if ($path === '/') return page_home($site, 1);
     if (preg_match('#^/page/(\d+)/?$#', $path, $m)) return page_home($site, (int)$m[1]);
-    if (preg_match('#^/category/(?:[^/]+/)*([^/]+)/(?:page/(\d+)/?)?$#', $path, $m)) return page_category($site, $m[1], (int)($m[2] ?? 1) ?: 1);
+    if (preg_match('#^/category/(?:[^/]+/)*([^/]+)/(?:page/(\d+)/?)?$#', $path, $m) && ($h = page_category($site, $m[1], (int)($m[2] ?? 1) ?: 1)) !== '') return $h;
     if (preg_match('#^/(a-propos|contact|mentions-legales|confidentialite)/?$#', $path, $m)) return page_static($site, $m[1]);
     if (!empty($site['jobs'])) {
         if ($path === '/offres-emploi/') return page_jobs_home($site);
@@ -85,7 +87,22 @@ function route(array $site, string $path): ?string
     }
     $st = $db->prepare('SELECT dst, code FROM redirects WHERE src=?');
     $st->execute([$norm]);
-    if ($r = $st->fetch()) { header('Location: ' . $r['dst'], true, (int)$r['code']); return null; }
+    $r = $st->fetch();
+    if (!$r) {
+        // règles par préfixe (src se terminant par *), la plus longue d'abord — ex. '/offre-d-emploi/*' -> 301, '/*' -> 410
+        foreach ($db->query("SELECT src, dst, code FROM redirects WHERE src LIKE '%*' ORDER BY length(src) DESC") as $rule) {
+            if (str_starts_with($norm, rtrim($rule['src'], '*'))) { $r = $rule; break; }
+        }
+        // l'ancien slug d'un article existant reste prioritaire sur la règle générique
+        if ($r && $r['src'] === '/*' && preg_match('#/([a-z0-9\-]+)/$#', $norm, $m)) {
+            $s2 = $db->prepare("SELECT path FROM posts WHERE slug=? AND status='publish'"); $s2->execute([$m[1]]);
+            if ($to = $s2->fetchColumn()) { header('Location: ' . $to, true, 301); return null; }
+        }
+    }
+    if ($r) {
+        if ((int)$r['code'] === 410) { http_response_code(410); return page_404($site); }
+        header('Location: ' . $r['dst'], true, (int)$r['code']); return null;
+    }
     // Ancienne URL WordPress /AAAA/MM/JJ/slug/ ou /slug/ : on retrouve l'article par son slug.
     if (preg_match('#/([a-z0-9\-]+)/$#', $norm, $m)) {
         $st = $db->prepare("SELECT path FROM posts WHERE slug=? AND status='publish'");
