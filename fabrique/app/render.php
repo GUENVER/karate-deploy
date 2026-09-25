@@ -290,14 +290,14 @@ function page_post(array $site, array $p): string
     $schema = [[
         '@context' => 'https://schema.org', '@type' => 'Article', 'headline' => mb_substr($p['title'], 0, 110), 'description' => $p['meta_desc'],
         'datePublished' => str_replace(' ', 'T', $p['published_at']) . 'Z', 'dateModified' => str_replace(' ', 'T', $p['updated_at'] ?: $p['published_at']) . 'Z',
-        'mainEntityOfPage' => $url, 'image' => $p['image'] ? [$p['image']] : null, 'wordCount' => (int)$p['words'],
+        'mainEntityOfPage' => $url, 'image' => $p['image'] ? [abs_url($site, $p['image'])] : null, 'wordCount' => (int)$p['words'],
         'author' => org_schema($site), 'publisher' => org_schema($site), 'inLanguage' => $site['lang'] ?: 'fr',
     ], breadcrumbs($site, array_merge($crumb, [[$p['title'], $p['path']]]))];
     if ($faq) $schema[] = ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => array_map(fn($f) => ['@type' => 'Question', 'name' => $f['q'], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f['a']]], $faq)];
 
     return layout($site, [
         'title' => $p['meta_title'] ?: $p['title'], 'og_title' => $p['title'], 'desc' => $p['meta_desc'] ?: mb_strimwidth(strip_tags((string)$p['excerpt']), 0, 155, '…'),
-        'canonical' => $url, 'image' => $p['image'], 'og_type' => 'article', 'schema' => $schema,
+        'canonical' => $url, 'image' => $p['image'] ? abs_url($site, $p['image']) : '', 'og_type' => 'article', 'schema' => $schema,
     ], $body);
 }
 
