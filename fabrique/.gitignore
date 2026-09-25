@@ -1,0 +1,6 @@
+config.php
+data/
+public/_m/
+generator/gen-config.php
+generator/state.json
+generator/gen.lock

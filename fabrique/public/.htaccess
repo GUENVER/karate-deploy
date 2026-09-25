@@ -1,0 +1,11 @@
+Options -Indexes
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_X_FABRIQUE_TOKEN:%{HTTP:X-Fabrique-Token}]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L]
+</IfModule>
+<IfModule mod_expires.c>
+ExpiresActive On
+ExpiresByType image/webp "access plus 1 year"
+</IfModule>
