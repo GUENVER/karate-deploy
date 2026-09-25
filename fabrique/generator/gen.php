@@ -150,7 +150,9 @@ function do_article(array $site, array $t): void
         'keyword' => section($x, 'KEYWORD') ?: $t['keyword'], 'content' => $content, 'faq' => $faq, 'products' => $products,
         'image' => $img, 'image_alt' => section($x, 'TITLE') ?: $t['title'], 'image_credit' => $credit, 'provider' => $r['provider'],
     ];
-    $res = fab('ingest', ['host' => $site['host'], 'topic_id' => $t['id'], 'post' => $post]);
+    $payload = ['host' => $site['host'], 'topic_id' => $t['id'], 'post' => $post];
+    try { $res = fab('ingest', $payload); }
+    catch (Throwable $e) { outbox_put($payload); logx('  ⏸ publication différée (fabrique indisponible)'); return; }
     if (!empty($res['ok'])) logx("  ✔ {$res['url']} ({$res['words']} mots, {$r['provider']})");
     else logx('  ✘ rejeté : ' . implode(', ', $res['errors'] ?? []) . " ({$r['provider']})");
 }
@@ -189,7 +191,26 @@ function find_image(string $q): array
     return ['', ''];
 }
 
+// Articles rédigés mais non publiés (fabrique saturée) : conservés et republiés au passage suivant.
+function outbox_put(array $payload): void
+{
+    $d = __DIR__ . '/outbox';
+    if (!is_dir($d)) mkdir($d, 0700, true);
+    file_put_contents($d . '/' . date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.json', json_encode($payload, JSON_UNESCAPED_UNICODE));
+}
+
+function outbox_flush(): void
+{
+    foreach (array_slice(glob(__DIR__ . '/outbox/*.json') ?: [], 0, 10) as $f) {
+        $payload = json_decode((string)file_get_contents($f), true);
+        try { $res = fab('ingest', $payload); } catch (Throwable $e) { logx('outbox : fabrique toujours indisponible'); return; }
+        @unlink($f);
+        logx('outbox ' . (!empty($res['ok']) ? '✔ ' . $res['url'] : '✘ ' . implode(', ', $res['errors'] ?? [])));
+    }
+}
+
 // --- boucle principale ---
+outbox_flush();
 $done = 0;
 while ($done < $max && time() < $deadline - 60) {
     $jobs = fab('jobs', null, array_filter(['limit' => min(3, $max - $done), 'host' => $opt['host'] ?? null]))['jobs'] ?? [];
