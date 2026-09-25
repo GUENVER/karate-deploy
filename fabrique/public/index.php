@@ -13,6 +13,7 @@ if (str_starts_with($path, '/_admin')) { require dirname(__DIR__) . '/app/admin.
 if (str_starts_with($path, '/_api/')) { require dirname(__DIR__) . '/app/api.php'; api_main(substr($path, 6)); exit; }
 
 $site = site_by_host($host);
+if (!$site && $path === '/') { header('Location: /_admin/', true, 302); exit; } // hôte d'administration (ex. fabrique.caen.pro)
 if (!$site || $site['status'] === 'deleted') { http_response_code(404); echo 'Site inconnu.'; exit; }
 
 // www / alias -> hôte canonique
