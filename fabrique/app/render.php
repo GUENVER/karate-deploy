@@ -75,7 +75,7 @@ function layout(array $site, array $m, string $body): string
         . '<main class="w">' . $body . '</main>'
         . '<footer class="bot"><div class="w"><p><strong>' . h($site['name']) . '</strong> — ' . h($site['tagline']) . '</p>'
         . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a><a href="/confidentialite/">Confidentialité</a><a href="/sitemap.xml">Plan du site</a></p>'
-        . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer></body></html>';
+        . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer><script>setTimeout(function(){var d=new FormData();d.append("p",location.pathname);navigator.sendBeacon("/_pv",d)},1500)</script></body></html>';
 }
 
 function card(array $p, bool $h2 = true): string

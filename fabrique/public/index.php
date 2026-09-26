@@ -41,16 +41,24 @@ if (preg_match('#^/(wp-admin|wp-login\.php|xmlrpc\.php|wp-json)#', $path)) { htt
 
 if ($site['status'] === 'paused' && !isset($_COOKIE['fab_admin'])) { http_response_code(503); header('Retry-After: 3600'); echo 'Maintenance.'; exit; }
 
-// Compteur de pages vues (hors robots).
-if (!is_bot() && $_SERVER['REQUEST_METHOD'] === 'GET') {
-    try { site_db($site['host'])->prepare('INSERT INTO stats(day,pv) VALUES(?,1) ON CONFLICT(day) DO UPDATE SET pv=pv+1')->execute([gmdate('Y-m-d')]); } catch (Throwable $e) {}
+// Compteur de pages vues : balise envoyée par le navigateur (JavaScript), les robots qui imitent un navigateur ne l'exécutent pas.
+if ($path === '/_pv') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_bot()) {
+        try {
+            $db = site_db($site['host']);
+            $db->prepare('INSERT INTO stats(day,pv) VALUES(?,1) ON CONFLICT(day) DO UPDATE SET pv=pv+1')->execute([gmdate('Y-m-d')]);
+            $p = substr((string)($_POST['p'] ?? ''), 0, 300);
+            if ($p !== '') $db->prepare("UPDATE posts SET views=views+1 WHERE path=? AND status='publish'")->execute([$p]);
+        } catch (Throwable $e) {}
+    }
+    http_response_code(204); exit;
 }
 
 if ($path === '/recherche/' || $path === '/recherche') { echo page_search($site, (string)($_GET['q'] ?? '')); exit; }
 
 // Cache HTML (vidé à chaque publication).
 $ckey = cache_dir($site['host']) . '/' . md5($path . '?' . ($_GET['contrat'] ?? '')) . '.html';
-if (is_file($ckey) && filemtime($ckey) > time() - 86400) { header('Content-Type: text/html; charset=utf-8'); header('X-Cache: HIT'); readfile($ckey); count_view($site, $path); exit; }
+if (is_file($ckey) && filemtime($ckey) > time() - 86400) { header('Content-Type: text/html; charset=utf-8'); header('X-Cache: HIT'); readfile($ckey); exit; }
 
 $html = route($site, $path);
 if ($html === null) exit; // redirection déjà envoyée
@@ -61,7 +69,6 @@ if ((int)http_response_code() === 200) { // on ne met en cache que les pages 200
 }
 header('Content-Type: text/html; charset=utf-8');
 echo $html;
-count_view($site, $path);
 
 function count_view(array $site, string $path): void
 {
