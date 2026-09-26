@@ -217,8 +217,9 @@ function commune_sync_ecoles(PDO $db, string $dir): int
 {
     $res = [];
     $y = (int)date('Y');
-    foreach ([$y, $y - 1, $y - 2] as $s) { // brevet : dernière session publiée
-        foreach (edu_csv('fr-en-dnb-par-etablissement', 'session="' . $s . '"', "$dir/dnb.csv") as $r) $res[$r['numero_d_etablissement']] = ['brevet' => (float)str_replace([',', '%'], ['.', ''], $r['taux_de_reussite']), 'session' => $s];
+    foreach ([$y, $y - 1, $y - 2] as $s) { // brevet : indicateurs de valeur ajoutée des collèges, dernière session publiée
+        foreach (edu_csv('fr-en-indicateurs-valeur-ajoutee-colleges', 'session="' . $s . '"', "$dir/dnb.csv") as $r)
+            if ($r['taux_de_reussite_g'] !== '') $res[$r['uai']] = ['brevet' => (float)$r['taux_de_reussite_g'], 'va_brevet' => $r['va_du_taux_de_reussite_g'] === '' ? null : (float)$r['va_du_taux_de_reussite_g'], 'session' => $s];
         if ($res) break;
     }
     foreach (['fr-en-indicateurs-de-resultat-des-lycees-gt_v2', 'fr-en-indicateurs-de-resultat-des-lycees-pro_v2'] as $ds) {
@@ -411,15 +412,15 @@ function page_commune(array $site, string $dept, string $slug): string
     if ($ec) {
         $cnt = array_count_values(array_column($ec, 'type'));
         usort($ec, fn($a, $b) => [array_search($a['type'], ['Lycée', 'Collège', 'Ecole']), $a['nom']] <=> [array_search($b['type'], ['Lycée', 'Collège', 'Ecole']), $b['nom']]);
-        $row = fn($e) => '<tr><td>' . h(ucwords(mb_strtolower($e['nom']))) . '</td><td>' . h($e['type'] === 'Ecole' ? 'École ' . ($e['sub'] ?? '') : $e['type']) . (!empty($e['voies']) ? '<br><small>' . h($e['voies']) . '</small>' : '') . '</td><td>' . h($e['statut'] ?? '') . '</td><td>'
+        $row = fn($e) => '<tr><td>' . h(mb_convert_case(mb_strtolower($e['nom']), MB_CASE_TITLE)) . '</td><td>' . h($e['type'] === 'Ecole' ? 'École ' . ($e['sub'] ?? '') : $e['type']) . (!empty($e['voies']) ? '<br><small>' . h($e['voies']) . '</small>' : '') . '</td><td>' . h($e['statut'] ?? '') . '</td><td>'
             . (isset($e['bac']) ? 'Bac : <strong>' . pct((float)$e['bac']) . '</strong>' . (isset($e['va']) ? ' <small>(valeur ajoutée ' . ($e['va'] >= 0 ? '+' : '') . $e['va'] . ')</small>' : '') : '')
-            . (isset($e['brevet']) ? 'Brevet : <strong>' . pct((float)$e['brevet']) . '</strong>' : '') . '</td></tr>';
+            . (isset($e['brevet']) ? 'Brevet : <strong>' . pct((float)$e['brevet']) . '</strong>' . (isset($e['va_brevet']) ? ' <small>(valeur ajoutée ' . ($e['va_brevet'] >= 0 ? '+' : '') . $e['va_brevet'] . ')</small>' : '') : '') . '</td></tr>';
         $body .= '<h2>Écoles, collèges et lycées à ' . h($name) . '</h2><p>' . implode(', ', array_map(fn($t, $n) => $n . ' ' . ($t === 'Ecole' ? 'école(s)' : mb_strtolower($t) . '(s)'), array_keys($cnt), $cnt)) . '.</p>'
             . '<table><thead><tr><th>Établissement</th><th>Type</th><th>Secteur</th><th>Résultats</th></tr></thead><tbody>' . implode('', array_map($row, array_slice($ec, 0, 60))) . '</tbody></table>';
-        $best = array_values(array_filter($ec, fn($e) => isset($e['bac'])));
+        $best = array_values(array_filter($ec, fn($e) => isset($e['bac']) && str_contains($e['voies'] ?? '', 'générale')));
         usort($best, fn($a, $b) => $b['bac'] <=> $a['bac']);
         $faq[] = ['q' => 'Combien d\'écoles à ' . $name . ' ?', 'a' => implode(', ', array_map(fn($t, $n) => $n . ' ' . ($t === 'Ecole' ? 'école(s)' : mb_strtolower($t) . '(s)'), array_keys($cnt), $cnt)) . ' (annuaire de l\'Éducation nationale).'];
-        if ($best) $faq[] = ['q' => 'Quel est le meilleur lycée de ' . $name . ' ?', 'a' => 'Au bac ' . $best[0]['session_bac'] . ', le meilleur taux de réussite est celui de ' . ucwords(mb_strtolower($best[0]['nom'])) . ' (' . pct((float)$best[0]['bac']) . '). La valeur ajoutée, qui tient compte du profil des élèves, est un indicateur complémentaire.'];
+        if ($best) $faq[] = ['q' => 'Quel est le meilleur lycée de ' . $name . ' ?', 'a' => 'Au bac ' . $best[0]['session_bac'] . ', le meilleur taux de réussite est celui de ' . mb_convert_case(mb_strtolower($best[0]['nom']), MB_CASE_TITLE) . ' (' . pct((float)$best[0]['bac']) . '). La valeur ajoutée, qui tient compte du profil des élèves, est un indicateur complémentaire.'];
     }
     // Délinquance
     $dl = commune_extra($db, $c['insee'], 'delinq');
