@@ -116,6 +116,6 @@ foreach ($pages as $pg) {
         $done++; $bySite[$pg['host']] = ($bySite[$pg['host']] ?? 0) + 1;
         gb_say("+ {$pg['host']}{$pg['path']} ({$pg['impr']} impr.) → {$r['words']} mots, " . count($faq) . ' FAQ');
         sleep(5);
-    } catch (Throwable $e) { gb_say("! {$pg['host']}{$pg['path']} : " . $e->getMessage()); }
+    } catch (Throwable $e) { if (!str_contains($e->getMessage(), 'article inconnu')) gb_say("! {$pg['host']}{$pg['path']} : " . $e->getMessage()); } // anciennes URL hors fabrique : ignorées
 }
 gb_say("$done article(s) enrichi(s)");
