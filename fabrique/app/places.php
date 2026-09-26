@@ -145,7 +145,7 @@ function page_places_home(array $site): string
     $body = '<h1 style="margin-top:28px">' . h($m['title']) . ' : ' . number_format($total, 0, ',', ' ') . ' adresses par département</h1>'
         . '<p class="lead">L\'annuaire des ' . h($m['many']) . ' : ' . number_format($total, 0, ',', ' ') . ' fiches dans ' . count($depts) . ' départements, avec adresse, informations pratiques et carte.</p>'
         . '<h2>À découvrir</h2>' . place_cards($m, $top)
-        . '<h2>Par département</h2><p>' . implode(' · ', array_map(fn($d, $n) => '<a href="' . $base . h(dept_slug((string)$d)) . '/">' . h(DEPTS[$d] ?? $d) . '</a> (' . $n . ')', array_keys($depts), $depts)) . '</p>'
+        . '<h2>Par département</h2><p>' . implode(' · ', array_map(fn($d, $n) => '<a href="' . $base . h(dept_slug((string)$d)) . '/">' . h((string)(DEPTS[$d] ?? $d)) . '</a> (' . $n . ')', array_keys($depts), $depts)) . '</p>'
         . places_guides($site) . places_footer($m);
     return layout($site, ['title' => $m['title'] . ' : annuaire par département | ' . $site['name'],
         'desc' => 'Annuaire des ' . $m['many'] . ' : ' . $total . ' adresses classées par département et par ville, avec informations pratiques et carte.',
