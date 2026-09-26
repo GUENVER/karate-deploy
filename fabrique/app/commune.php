@@ -218,7 +218,7 @@ function commune_sync_ecoles(PDO $db, string $dir): int
     $res = [];
     $y = (int)date('Y');
     foreach ([$y, $y - 1, $y - 2] as $s) { // brevet : indicateurs de valeur ajoutée des collèges, dernière session publiée
-        foreach (edu_csv('fr-en-indicateurs-valeur-ajoutee-colleges', 'session="' . $s . '"', "$dir/dnb.csv") as $r)
+        foreach (edu_csv('fr-en-indicateurs-valeur-ajoutee-colleges', 'year(session)=' . $s, "$dir/dnb.csv") as $r)
             if ($r['taux_de_reussite_g'] !== '') $res[$r['uai']] = ['brevet' => (float)$r['taux_de_reussite_g'], 'va_brevet' => $r['va_du_taux_de_reussite_g'] === '' ? null : (float)$r['va_du_taux_de_reussite_g'], 'session' => $s];
         if ($res) break;
     }
