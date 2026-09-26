@@ -70,6 +70,11 @@ function ev_sync(array $site, callable $log): array
     while (($r = fgetcsv($in, 0, ',', '"', '')) !== false) {
         $cp = $g($r, 'consolidated_code_postal'); $city = $g($r, 'consolidated_commune');
         $lat = (float)$g($r, 'consolidated_latitude'); $lon = (float)$g($r, 'consolidated_longitude');
+        if ((!preg_match('/^\d{5}$/', $cp) || $city === '') && $lat > 41 && $lat < 51.2 && $lon > -5.5 && $lon < 9.8
+            && preg_match('/\b((?:0[1-9]|[1-8]\d|9[0-5]|97)\d{3})\b[ ,]*([^\d,]{2,})?/u', $g($r, 'adresse_station'), $am)) { // code postal/commune non consolidés : repris de l'adresse
+            $cp = $am[1];
+            if ($city === '') $city = trim((string)preg_replace('/\s*(cedex.*|france)$/iu', '', trim($am[2] ?? '')));
+        }
         if (!preg_match('/^\d{5}$/', $cp) || $city === '' || !$lat) { $skip++; continue; }
         $sid = $g($r, 'id_station_itinerance');
         $id = preg_match('/^FR[A-Z0-9]{3}P/i', $sid) ? strtoupper($sid) : 'X' . substr(md5($g($r, 'nom_station') . '|' . round($lat, 5) . '|' . round($lon, 5)), 0, 15);
