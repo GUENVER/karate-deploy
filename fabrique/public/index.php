@@ -7,6 +7,7 @@ require dirname(__DIR__) . '/app/render.php';
 require dirname(__DIR__) . '/app/feeds.php';
 require dirname(__DIR__) . '/app/jobs.php';
 require dirname(__DIR__) . '/app/fuel.php';
+require dirname(__DIR__) . '/app/ev.php';
 
 $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
@@ -34,6 +35,7 @@ switch ($path) {
 }
 if (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) { out_sitemap_posts($site, (int)$m[1]); exit; }
 if ($site['jobs'] && preg_match('#^/sitemap-jobs-(\d+)\.xml$#', $path, $m)) { out_sitemap_jobs($site, (int)$m[1]); exit; }
+if (!empty($site['ev']) && preg_match('#^/sitemap-bornes-(\d+)\.xml$#', $path, $m)) { out_sitemap_ev($site, (int)$m[1]); exit; }
 if (!empty($site['fuel']) && preg_match('#^/sitemap-carburant-(\d+)\.xml$#', $path, $m)) { out_sitemap_fuel($site, (int)$m[1]); exit; }
 if (preg_match('#^/(wp-admin|wp-login\.php|xmlrpc\.php|wp-json)#', $path)) { http_response_code(410); exit; }
 
@@ -78,6 +80,12 @@ function route(array $site, string $path): ?string
         if (preg_match('#^/prix-carburant/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m) && ($dept = dept_by_slug($m[1])))
             return empty($m[2]) ? page_fuel_dept($site, $dept) : page_fuel_city($site, $dept, $m[2]);
         if (preg_match('#^/station/([a-z0-9\-]+)/$#', $path, $m)) return page_station($site, $m[1]);
+    }
+    if (!empty($site['ev'])) {
+        if ($path === '/bornes-recharge/') return page_ev_france($site);
+        if (preg_match('#^/bornes-recharge/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m) && ($dept = dept_by_slug($m[1])))
+            return empty($m[2]) ? page_ev_dept($site, $dept) : page_ev_city($site, $dept, $m[2]);
+        if (preg_match('#^/borne/([a-z0-9\-]+)/$#', $path, $m)) return page_borne($site, $m[1]);
     }
     if (!empty($site['jobs'])) {
         if ($path === '/offres-emploi/') return page_jobs_home($site);

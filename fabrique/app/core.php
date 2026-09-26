@@ -43,6 +43,7 @@ function registry(): PDO
     $cols = array_column($db->query('PRAGMA table_info(sites)')->fetchAll(), 'name');
     if (!in_array('jobs', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN jobs INTEGER DEFAULT 0');
     if (!in_array('fuel', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN fuel INTEGER DEFAULT 0');
+    if (!in_array('ev', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN ev INTEGER DEFAULT 0');
     return $db;
 }
 

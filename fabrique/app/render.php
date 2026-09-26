@@ -36,7 +36,9 @@ blockquote{border-left:4px solid var(--c);margin:1em 0;padding:.3em 1em;backgrou
 .amz ul{list-style:none;padding:0;margin:0}.amz li{padding:10px 0;border-top:1px solid #f3e2c7;display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .amz li:first-child{border-top:0}.amz .btn{background:#ff9900;color:#111;text-decoration:none;font-weight:700;padding:8px 14px;border-radius:8px;font-size:.9rem;white-space:nowrap}
 .amz small,.disc{color:var(--m);font-size:.78rem}.faq details{border:1px solid var(--b);border-radius:10px;padding:10px 16px;margin:8px 0}.faq summary{font-weight:600;cursor:pointer}
-.ad{margin:26px 0;min-height:100px;text-align:center}aside .box{border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:22px}aside h4{margin:0 0 10px}
+.ad{margin:26px 0;min-height:100px;text-align:center}aside .box{border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:22px}
+.kpi{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}.kpi div{flex:1 1 130px;background:var(--s);border-radius:10px;padding:12px;font-size:.85rem}.kpi b{display:block;font-size:1.4rem;color:var(--c)}
+#evcalc .row{display:flex;flex-wrap:wrap;gap:10px}#evcalc label{flex:1 1 140px;font-size:.85rem}#evcalc input{width:100%;padding:7px;border:1px solid var(--b);border-radius:8px;font-size:1rem}aside h4{margin:0 0 10px}
 aside ul{padding-left:18px;margin:0;font-size:.93rem}aside li{margin:6px 0}.pag{display:flex;gap:10px;justify-content:center;margin:30px 0}.pag a,.pag span{padding:6px 12px;border:1px solid var(--b);border-radius:8px;text-decoration:none}
 footer.bot{border-top:1px solid var(--b);margin-top:50px;padding:26px 0;color:var(--m);font-size:.88rem;background:var(--s)}footer.bot a{color:var(--m);margin-right:14px}";
 }
@@ -58,6 +60,7 @@ function layout(array $site, array $m, string $body): string
 
     $nav = '';
     if (!empty($site['fuel'])) $nav .= '<a href="/prix-carburant/"><strong>Prix carburant</strong></a>';
+    if (!empty($site['ev'])) $nav .= '<a href="/bornes-recharge/"><strong>Bornes de recharge</strong></a>';
     if (!empty($site['jobs']) && function_exists('jobs_db') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' LIMIT 1")->fetchColumn()) $nav .= '<a href="/offres-emploi/"><strong>Offres d\'emploi</strong></a>';
     foreach (array_slice(site_categories($site), 0, 7) as $c) $nav .= '<a href="/category/' . h($c['slug']) . '/">' . h($c['name']) . '</a>';
     $parts = explode(' ', $site['name'], 2);
@@ -116,6 +119,7 @@ function page_home(array $site, int $page): string
     if ($page > 1 && !$posts) return '';
     $body = $page == 1 ? '<h1 style="margin:28px 0 0;font-size:1.7rem">' . h($site['name']) . ' — ' . h($site['tagline']) . '</h1>' : '<h1 style="margin:28px 0 0;font-size:1.5rem">Articles — page ' . $page . '</h1>';
     if ($page == 1 && !empty($site['fuel']) && function_exists('fuel_home_block')) $body .= fuel_home_block($site) . '<h2>Nos derniers guides</h2>';
+    if ($page == 1 && !empty($site['ev']) && function_exists('ev_home_block') && ($eb = ev_home_block($site))) $body .= $eb . '<h2>Nos derniers guides</h2>';
     $body .= '<div class="grid">' . implode('', array_map('card', $posts)) . '</div>' . pager('/', $page, $pages);
     $url = 'https://' . $site['host'] . '/' . ($page > 1 ? "page/$page/" : '');
     return layout($site, [
