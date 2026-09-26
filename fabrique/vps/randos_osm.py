@@ -26,13 +26,18 @@ def commune(lat, lon):
     return None, None
 
 
-rows, seen = [], set()
+rows, seen, failed = [], set(), False
 for dept in env.get('DEPTS', '14,27,50,61,76').split(','):
     q = f'[out:json][timeout:120];area["ref:INSEE"="{dept}"]["admin_level"="6"]->.a;rel(area.a)["route"="hiking"];out center tags;'
-    try:
-        els = get('https://overpass-api.de/api/interpreter', urllib.parse.urlencode({'data': q}).encode())['elements']
-    except Exception as e:
-        print('overpass', dept, e); continue
+    els = None
+    for attempt in range(4):  # Overpass renvoie souvent 504/429 : on réessaie
+        try:
+            els = get('https://overpass-api.de/api/interpreter', urllib.parse.urlencode({'data': q}).encode())['elements']
+            break
+        except Exception as e:
+            print('overpass', dept, e); time.sleep(60)
+    if els is None:
+        failed = True; continue
     print(dept, len(els), 'itinéraires')
     for e in els:
         t, c = e.get('tags', {}), e.get('center')
@@ -62,7 +67,7 @@ for dept in env.get('DEPTS', '14,27,50,61,76').split(','):
 print(len(rows), 'fiches')
 stamp = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
 for i in range(0, len(rows), 400):
-    body = json.dumps({'host': env['FAB_HOST'], 'rows': rows[i:i + 400], 'stamp': stamp, 'final': i + 400 >= len(rows) and len(rows) > 100}).encode()
+    body = json.dumps({'host': env['FAB_HOST'], 'rows': rows[i:i + 400], 'stamp': stamp, 'final': i + 400 >= len(rows) and len(rows) > 100 and not failed}).encode()
     req = urllib.request.Request(env['FAB_API'].rstrip('/') + '/_api/places', data=body, headers={**UA, 'Content-Type': 'application/json', 'X-Fabrique-Token': env['FAB_TOKEN']})
     with urllib.request.urlopen(req, timeout=120) as r:
         print(r.read().decode())
