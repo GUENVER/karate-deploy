@@ -57,6 +57,7 @@ function layout(array $site, array $m, string $body): string
     if ($ga = setting('ga4_id', '')) $head .= '<script async src="https://www.googletagmanager.com/gtag/js?id=' . h($ga) . '"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","' . h($ga) . '");</script>';
 
     $nav = '';
+    if (!empty($site['fuel'])) $nav .= '<a href="/prix-carburant/"><strong>Prix carburant</strong></a>';
     if (!empty($site['jobs']) && function_exists('jobs_db') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' LIMIT 1")->fetchColumn()) $nav .= '<a href="/offres-emploi/"><strong>Offres d\'emploi</strong></a>';
     foreach (array_slice(site_categories($site), 0, 7) as $c) $nav .= '<a href="/category/' . h($c['slug']) . '/">' . h($c['name']) . '</a>';
     $parts = explode(' ', $site['name'], 2);
@@ -114,6 +115,7 @@ function page_home(array $site, int $page): string
     [$posts, $pages] = list_posts($site, '', [], $page);
     if ($page > 1 && !$posts) return '';
     $body = $page == 1 ? '<h1 style="margin:28px 0 0;font-size:1.7rem">' . h($site['name']) . ' — ' . h($site['tagline']) . '</h1>' : '<h1 style="margin:28px 0 0;font-size:1.5rem">Articles — page ' . $page . '</h1>';
+    if ($page == 1 && !empty($site['fuel']) && function_exists('fuel_home_block')) $body .= fuel_home_block($site) . '<h2>Nos derniers guides</h2>';
     $body .= '<div class="grid">' . implode('', array_map('card', $posts)) . '</div>' . pager('/', $page, $pages);
     $url = 'https://' . $site['host'] . '/' . ($page > 1 ? "page/$page/" : '');
     return layout($site, [
