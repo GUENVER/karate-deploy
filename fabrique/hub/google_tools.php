@@ -6,6 +6,7 @@
 //   php google_tools.php verify-token <domaine>          -> jeton TXT à poser dans le DNS (propriété Domaine)
 //   php google_tools.php verify <domaine>                -> vérifie (DNS) puis ajoute sc-domain:<domaine>
 //   php google_tools.php sitemap <propriété> <url>       -> soumet un sitemap
+//   php google_tools.php sitemaps                        -> soumet le sitemap de chaque site (cron hebdomadaire)
 //   php google_tools.php push                            -> envoie les revenus AdSense aux fabriques (cron quotidien)
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli' && !defined('GOOGLE_TOOLS_LIB')) exit;
@@ -79,6 +80,28 @@ if (PHP_SAPI === 'cli' && !defined('GOOGLE_TOOLS_LIB')) {
             'sitemap' => (function () use ($argv) {
                 gt_req('PUT', 'https://www.googleapis.com/webmasters/v3/sites/' . rawurlencode($argv[2]) . '/sitemaps/' . rawurlencode($argv[3]));
                 return ['ok' => $argv[3]];
+            })(),
+            'sitemaps' => (function () {
+                // soumet le sitemap de chaque site des fabriques dans sa propriété Search Console (sc-domain:<domaine racine>)
+                $props = array_column(array_filter(gt_req('GET', 'https://www.googleapis.com/webmasters/v3/sites')['siteEntry'] ?? [], fn($e) => $e['permissionLevel'] !== 'siteUnverifiedUser'), 'siteUrl');
+                $out = [];
+                foreach (glob('/home3/guenver/fabrique-gen/gen-config*.php') as $f) {
+                    if (str_contains($f, 'sample')) continue;
+                    $G = include $f;
+                    $ch = curl_init(rtrim($G['api_base'], '/') . '/_api/sites');
+                    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_HTTPHEADER => ['X-Fabrique-Token: ' . $G['api_token']]]);
+                    $sites = json_decode((string)curl_exec($ch), true) ?: [];
+                    curl_close($ch);
+                    foreach ($sites as $s) {
+                        if (($s['status'] ?? '') !== 'active') continue;
+                        $root = implode('.', array_slice(explode('.', $s['host']), -2));
+                        $prop = in_array('sc-domain:' . $root, $props, true) ? 'sc-domain:' . $root : null;
+                        if (!$prop) { $out[$s['host']] = 'aucune propriété Search Console'; continue; }
+                        try { gt_req('PUT', 'https://www.googleapis.com/webmasters/v3/sites/' . rawurlencode($prop) . '/sitemaps/' . rawurlencode('https://' . $s['host'] . '/sitemap.xml')); $out[$s['host']] = 'ok'; }
+                        catch (Throwable $e) { $out[$s['host']] = $e->getMessage(); }
+                    }
+                }
+                return $out;
             })(),
             'push' => (function () {
                 // envoie les revenus (7 j et 30 j) à chaque fabrique connue du générateur

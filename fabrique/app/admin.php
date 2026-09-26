@@ -278,13 +278,18 @@ function cpanel_add_subdomain(string $sub, string $root): string
     $rel = ltrim(substr(cfg('public_dir'), strlen(rtrim($home, '/'))), '/');
     $r = uapi('SubDomain', 'addsubdomain', ['domain' => $sub, 'rootdomain' => $root, 'dir' => $rel, 'disallowdot' => 0]);
     if (empty($r['status'])) return 'erreur ' . implode(' ', (array)($r['errors'] ?? []));
-    uapi('SSL', 'start_autossl_check', []);
-    return 'sous-domaine créé, SSL demandé';
+    // Pas d'AutoSSL chez o2switch : certificat Let's Encrypt émis en tâche de fond (délai d'activation du sous-domaine, puis 2e essai).
+    $host = $sub . '.' . $root;
+    $cmd = 'cd ' . escapeshellarg(FAB_ROOT) . ' && export HOME=' . escapeshellarg($home) . ' && (sleep 90; nice -n 19 bash cli/ssl.sh issue ' . escapeshellarg($host) . ' ' . escapeshellarg(cfg('public_dir'))
+        . ' || (sleep 300; nice -n 19 bash cli/ssl.sh issue ' . escapeshellarg($host) . ' ' . escapeshellarg(cfg('public_dir')) . ')) >> data/ssl_new.log 2>&1';
+    @shell_exec('nohup bash -c ' . escapeshellarg($cmd) . ' > /dev/null 2>&1 &');
+    return 'sous-domaine créé, certificat HTTPS en cours (~2 min)';
 }
 
 function cpanel_del_subdomain(string $host): string
 {
     // UAPI n'expose pas la suppression : API2 via cpapi2.
-    $out = @shell_exec('cpapi2 --output=json SubDomain delsubdomain domain=' . escapeshellarg($host) . ' 2>&1');
+    $bin = is_executable('/usr/local/cpanel/bin/cpapi2') ? '/usr/local/cpanel/bin/cpapi2' : 'cpapi2';
+    $out = @shell_exec($bin . ' --output=json SubDomain delsubdomain domain=' . escapeshellarg($host) . ' 2>&1');
     return str_contains((string)$out, '"result":1') ? 'sous-domaine supprimé' : 'suppression cPanel à vérifier';
 }
