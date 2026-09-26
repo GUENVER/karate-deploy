@@ -29,10 +29,12 @@ for r in rd('COM_UDI'):
     com_udi[r['inseecommune']].add(r['cdreseau']); udi_name[r['cdreseau']] = r['nomreseau']
 
 # prélèvements par réseau
-plv_udi, udi = {}, defaultdict(lambda: {'n': 0, 'b': 0, 'c': 0, 'last': ('', '')})
+plv_udi, udi = {}, defaultdict(lambda: {'n': 0, 'b': 0, 'bt': 0, 'c': 0, 'ct': 0, 'last': ('', '')})
 for r in rd('_PLV_'):
     u = udi[r['cdreseau']]; plv_udi[r['referenceprel']] = r['cdreseau']
-    u['n'] += 1; u['b'] += r['plvconformitebacterio'] == 'C'; u['c'] += r['plvconformitechimique'] == 'C'
+    u['n'] += 1  # conformité calculée sur les seuls prélèvements où le critère a été analysé (C conforme / N non conforme)
+    u['b'] += r['plvconformitebacterio'] == 'C'; u['bt'] += r['plvconformitebacterio'] in ('C', 'N')
+    u['c'] += r['plvconformitechimique'] == 'C'; u['ct'] += r['plvconformitechimique'] in ('C', 'N')
     if r['dateprel'] > u['last'][0]:
         u['last'] = (r['dateprel'], r['conclusionprel'])
 print(len(udi), 'réseaux,', len(plv_udi), 'prélèvements')
@@ -55,7 +57,8 @@ for insee, us in com_udi.items():
     n = sum(udi[x]['n'] for x in us)
     main = max(us, key=lambda x: udi[x]['n'])
     last = max((udi[x]['last'] for x in us), key=lambda t: t[0])
-    d = {'year': year, 'n': n, 'conf_bact': round(100 * sum(udi[x]['b'] for x in us) / n, 1), 'conf_chim': round(100 * sum(udi[x]['c'] for x in us) / n, 1),
+    bt, ct = sum(udi[x]['bt'] for x in us), sum(udi[x]['ct'] for x in us)
+    d = {'year': year, 'n': n, 'conf_bact': round(100 * sum(udi[x]['b'] for x in us) / bt, 1) if bt else 100.0, 'conf_chim': round(100 * sum(udi[x]['c'] for x in us) / ct, 1) if ct else 100.0,
          'reseau': udi_name.get(main, '').title(), 'last_date': last[0], 'last': last[1][:300]}
     for p, k in (('NO3', 'no3'), ('TH', 'th')):
         v = [y for x in us for y in val[x][p]]
