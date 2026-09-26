@@ -23,6 +23,8 @@ function api_main(string $route): void
             case 'stats': api_out(api_stats()); return;
             case 'niches': setting_set('niche_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true, 'top' => count($in['top'] ?? [])]); return;
             case 'adsense': setting_set('adsense_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true]); return;
+            case 'post': api_out(api_post($in)); return;
+            case 'enrich': api_out(api_enrich($in)); return;
             case 'sites': api_out(registry()->query("SELECT host,name,niche,status,gen,per_day FROM sites WHERE status<>'deleted'")->fetchAll()); return;
             default: api_out(['error' => 'route'], 404);
         }
@@ -223,4 +225,47 @@ function site_stats(array $s): array
         'pv_30d' => (int)$q("SELECT COALESCE(SUM(pv),0) FROM stats WHERE day>=date('now','-30 days')"),
         'last_post' => $s['last_post_at'], 'next_gen' => $s['next_gen_at'],
     ];
+}
+
+// Article existant (pour l'enrichissement à partir de Search Console).
+function api_post(array $in): array
+{
+    $s = need_site($in);
+    $st = site_db($s['host'])->prepare("SELECT title, keyword, content, faq, updated_at FROM posts WHERE path=? AND status='publish'");
+    $st->execute([(string)($in['path'] ?? '')]);
+    $p = $st->fetch();
+    if (!$p) throw new RuntimeException('article inconnu');
+    preg_match_all('#<h2[^>]*>(.*?)</h2>#is', (string)$p['content'], $m);
+    return ['title' => $p['title'], 'keyword' => $p['keyword'], 'h2' => array_map('strip_tags', $m[1]), 'text' => mb_substr(trim(strip_tags((string)$p['content'])), 0, 6000),
+        'faq' => json_decode((string)$p['faq'], true) ?: [], 'updated_at' => $p['updated_at'], 'niche' => $s['niche']];
+}
+
+// Ajoute une ou plusieurs sections et des questions FAQ à un article existant, met à jour la date et relance l'indexation.
+function api_enrich(array $in): array
+{
+    $s = need_site($in);
+    $db = site_db($s['host']);
+    $path = (string)($in['path'] ?? '');
+    $st = $db->prepare("SELECT id, content, faq FROM posts WHERE path=? AND status='publish'");
+    $st->execute([$path]);
+    $p = $st->fetch();
+    if (!$p) throw new RuntimeException('article inconnu');
+    $add = sanitize_html((string)($in['html'] ?? ''));
+    if (word_count($add) < 150 || stripos($add, '<h2') === false) throw new RuntimeException('complément trop court ou sans H2');
+    if (preg_match('/en tant qu.(ia|intelligence artificielle|assistant)|as an ai|je ne peux pas|\[(insérer|insert)|lorem ipsum/iu', $add)) throw new RuntimeException('formule IA / placeholder');
+    $content = (string)$p['content'];
+    // avant la conclusion si elle existe, sinon à la fin
+    if (preg_match('#<h2[^>]*>\s*(en )?(conclusion|pour conclure|en résumé|le mot de la fin)#iu', $content, $m, PREG_OFFSET_CAPTURE)) $content = substr($content, 0, $m[0][1]) . $add . substr($content, $m[0][1]);
+    else $content .= $add;
+    $faq = json_decode((string)$p['faq'], true) ?: [];
+    $known = array_map(fn($f) => mb_strtolower($f['q']), $faq);
+    foreach ((array)($in['faq'] ?? []) as $f) {
+        $q = trim(strip_tags((string)($f['q'] ?? ''))); $a = trim(strip_tags((string)($f['a'] ?? '')));
+        if ($q !== '' && $a !== '' && !in_array(mb_strtolower($q), $known, true)) { $faq[] = ['q' => $q, 'a' => $a]; $known[] = mb_strtolower($q); }
+    }
+    $db->prepare('UPDATE posts SET content=?, faq=?, words=?, updated_at=? WHERE id=?')->execute([$content, json_encode(array_slice($faq, 0, 12), JSON_UNESCAPED_UNICODE), word_count($content), now(), $p['id']]);
+    cache_clear($s['host']);
+    indexnow_ping($s, ['https://' . $s['host'] . $path]);
+    flog($s['host'], 'enrich', $path . ' +' . word_count($add) . ' mots (' . implode(', ', array_slice((array)($in['queries'] ?? []), 0, 5)) . ')');
+    return ['ok' => true, 'words' => word_count($content)];
 }

@@ -56,11 +56,27 @@ function out_rss(array $site): void
 {
     $rows = site_db($site['host'])->query("SELECT path,title,excerpt,published_at,image FROM posts WHERE status='publish' ORDER BY published_at DESC LIMIT 30")->fetchAll();
     header('Content-Type: application/rss+xml; charset=utf-8');
-    echo '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>' . h($site['name']) . '</title><link>https://' . $site['host'] . '/</link><description>' . h($site['tagline']) . '</description><language>' . h($site['lang']) . '</language>';
+    echo '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>' . h($site['name']) . '</title><link>https://' . $site['host'] . '/</link><description>' . h($site['tagline']) . '</description><language>' . h($site['lang']) . '</language>';
     foreach ($rows as $r) {
-        echo '<item><title>' . h($r['title']) . '</title><link>https://' . $site['host'] . h($r['path']) . '</link><guid>https://' . $site['host'] . h($r['path']) . '</guid><pubDate>' . gmdate(DATE_RSS, strtotime($r['published_at'] . ' UTC')) . '</pubDate><description>' . h(strip_tags((string)$r['excerpt'])) . '</description></item>';
+        echo '<item><title>' . h($r['title']) . '</title><link>https://' . $site['host'] . h($r['path']) . '</link><guid>https://' . $site['host'] . h($r['path']) . '</guid><pubDate>' . gmdate(DATE_RSS, strtotime($r['published_at'] . ' UTC')) . '</pubDate><description>' . h(strip_tags((string)$r['excerpt'])) . '</description>' . rss_image($site, (string)$r['image'], (string)$r['title']) . '</item>';
     }
     echo '</channel></rss>';
+}
+
+// Image de l'article en JPEG (Pinterest et certains lecteurs RSS n'acceptent pas le WebP) : copie .jpg créée une fois à côté du .webp.
+function rss_image(array $site, string $img, string $title): string
+{
+    if ($img === '') return '';
+    $url = $img;
+    if (str_starts_with($img, '/_m/') && str_ends_with($img, '.webp')) {
+        $src = cfg('public_dir') . $img;
+        $jpg = substr($src, 0, -5) . '.jpg';
+        if (!is_file($jpg) && is_file($src) && function_exists('imagecreatefromwebp') && ($im = @imagecreatefromwebp($src))) { imagejpeg($im, $jpg, 85); imagedestroy($im); }
+        if (is_file($jpg)) $url = substr($img, 0, -5) . '.jpg';
+    }
+    if ($url[0] === '/') $url = 'https://' . $site['host'] . $url;
+    $type = str_ends_with($url, '.webp') ? 'image/webp' : 'image/jpeg';
+    return '<enclosure url="' . h($url) . '" type="' . $type . '" length="0"/><media:content url="' . h($url) . '" medium="image" type="' . $type . '"><media:title>' . h($title) . '</media:title></media:content>';
 }
 
 function indexnow_key(): string
