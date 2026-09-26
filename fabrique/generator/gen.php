@@ -8,13 +8,13 @@ if (PHP_SAPI !== 'cli' && !defined('FAB_GEN_WEB')) exit;
 define('MCP_LIB_MODE', true);
 require '/home3/guenver/mcp.guenver.com/mcp.php';
 $CFG = require '/home3/guenver/mcp.guenver.com/config.php';
-$G = require __DIR__ . '/gen-config.php';
-
-$opt = getopt('', ['max::', 'time::', 'host::']);
+$opt = getopt('', ['max::', 'time::', 'host::', 'config::']);
+// --config=gen-config-xxx.php : autre fabrique (une instance par compte cPanel)
+$G = require __DIR__ . '/' . basename((string)($opt['config'] ?? 'gen-config.php'));
 $max = (int)($opt['max'] ?? 4);
 $deadline = time() + (int)($opt['time'] ?? 230);
 
-$lock = fopen(__DIR__ . '/gen.lock', 'c');
+$lock = fopen(__DIR__ . '/gen-' . md5((string)$G['api_base']) . '.lock', 'c');
 if (!flock($lock, LOCK_EX | LOCK_NB)) { echo date('c') . " déjà en cours\n"; exit; }
 
 function logx(string $m): void { echo date('c') . ' ' . $m . "\n"; }
@@ -194,14 +194,14 @@ function find_image(string $q): array
 // Articles rédigés mais non publiés (fabrique saturée) : conservés et republiés au passage suivant.
 function outbox_put(array $payload): void
 {
-    $d = __DIR__ . '/outbox';
+    $d = __DIR__ . '/outbox-' . md5((string)$GLOBALS['G']['api_base']);
     if (!is_dir($d)) mkdir($d, 0700, true);
     file_put_contents($d . '/' . date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.json', json_encode($payload, JSON_UNESCAPED_UNICODE));
 }
 
 function outbox_flush(): void
 {
-    foreach (array_slice(glob(__DIR__ . '/outbox/*.json') ?: [], 0, 10) as $f) {
+    foreach (array_slice(glob(__DIR__ . '/outbox-' . md5((string)$GLOBALS['G']['api_base']) . '/*.json') ?: [], 0, 10) as $f) {
         $payload = json_decode((string)file_get_contents($f), true);
         try { $res = fab('ingest', $payload); } catch (Throwable $e) { logx('outbox : fabrique toujours indisponible'); return; }
         @unlink($f);

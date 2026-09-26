@@ -17,6 +17,9 @@ $site = site_by_host($host);
 if (!$site && $path === '/') { header('Location: /_admin/', true, 302); exit; } // hôte d'administration (ex. fabrique.caen.pro)
 if (!$site || $site['status'] === 'deleted') { http_response_code(404); echo 'Site inconnu.'; exit; }
 
+// ads.txt servi tel quel sur chaque alias (le robot AdSense le lit à la racine du domaine, sans redirection)
+if ($path === '/ads.txt') { out_ads_txt(); exit; }
+
 // www / alias -> hôte canonique
 if ($host !== $site['host']) { header('Location: https://' . $site['host'] . ($_SERVER['REQUEST_URI'] ?? '/'), true, 301); exit; }
 
