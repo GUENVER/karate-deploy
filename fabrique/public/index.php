@@ -8,6 +8,7 @@ require dirname(__DIR__) . '/app/feeds.php';
 require dirname(__DIR__) . '/app/jobs.php';
 require dirname(__DIR__) . '/app/fuel.php';
 require dirname(__DIR__) . '/app/ev.php';
+require dirname(__DIR__) . '/app/places.php';
 
 $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
@@ -35,6 +36,7 @@ switch ($path) {
 }
 if (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) { out_sitemap_posts($site, (int)$m[1]); exit; }
 if ($site['jobs'] && preg_match('#^/sitemap-jobs-(\d+)\.xml$#', $path, $m)) { out_sitemap_jobs($site, (int)$m[1]); exit; }
+if (places_mod($site) && $path === '/sitemap-lieux.xml') { out_sitemap_places($site); exit; }
 if (!empty($site['ev']) && preg_match('#^/sitemap-bornes-(\d+)\.xml$#', $path, $m)) { out_sitemap_ev($site, (int)$m[1]); exit; }
 if (!empty($site['fuel']) && preg_match('#^/sitemap-carburant-(\d+)\.xml$#', $path, $m)) { out_sitemap_fuel($site, (int)$m[1]); exit; }
 if (preg_match('#^/(wp-admin|wp-login\.php|xmlrpc\.php|wp-json)#', $path)) { http_response_code(410); exit; }
@@ -87,6 +89,11 @@ function route(array $site, string $path): ?string
         if (preg_match('#^/prix-carburant/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m) && ($dept = dept_by_slug($m[1])))
             return empty($m[2]) ? page_fuel_dept($site, $dept) : page_fuel_city($site, $dept, $m[2]);
         if (preg_match('#^/station/([a-z0-9\-]+)/$#', $path, $m)) return page_station($site, $m[1]);
+    }
+    if ($pm = places_mod($site)) {
+        if ($path === '/' . $pm['prefix'] . '/') return page_places_home($site);
+        if (preg_match('#^/' . $pm['prefix'] . '/([a-z0-9\-]+)/$#', $path, $m) && ($dept = dept_by_slug($m[1]))) return page_places_dept($site, $dept);
+        if (preg_match('#^/' . $pm['item'] . '/([a-z0-9\-]+)/$#', $path, $m)) return page_place($site, $m[1]);
     }
     if (!empty($site['ev'])) {
         if ($path === '/bornes-recharge/') return page_ev_france($site);

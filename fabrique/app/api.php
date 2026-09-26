@@ -24,6 +24,10 @@ function api_main(string $route): void
             case 'niches': setting_set('niche_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true, 'top' => count($in['top'] ?? [])]); return;
             case 'adsense': setting_set('adsense_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true]); return;
             case 'post': api_out(api_post($in)); return;
+            case 'places': // import poussé (ex. randonnées OpenStreetMap depuis le VPS) : lots de lignes, puis final=true pour purger les absentes
+                $s = need_site($in); if (!places_mod($s)) throw new RuntimeException('module lieux inactif');
+                $n = places_store($s, (array)($in['rows'] ?? []), (string)$in['stamp']);
+                api_out(['ok' => true, 'stored' => $n, 'purged' => !empty($in['final']) ? places_finish($s, (string)$in['stamp']) : 0]); return;
             case 'enrich': api_out(api_enrich($in)); return;
             case 'sites': api_out(registry()->query("SELECT host,name,niche,status,gen,per_day FROM sites WHERE status<>'deleted'")->fetchAll()); return;
             default: api_out(['error' => 'route'], 404);
