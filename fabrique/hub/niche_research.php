@@ -3,7 +3,8 @@
 // Signaux : Google Trends FR, requêtes Search Console de la flotte, jeux data.gouv.fr populaires
 // → l'IA propose des niches → chaque niche est notée : demande (Google Suggest), concurrence (Bing, SerpApi si configuré),
 // données publiques automatisables (data.gouv), revenu estimé → top 5 envoyé à l'admin de la fabrique (bouton « Créer ce site »).
-// Usage : php niche_research.php [--candidats=20] [--dry]
+// Le rapport est aussi envoyé par e-mail (Gmail du hub, repli mail()).
+// Usage : php niche_research.php [--candidats=20] [--dry] [--mail-last]
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') exit;
 
@@ -13,7 +14,10 @@ $CFG = require '/home3/guenver/mcp.guenver.com/config.php';
 define('GOOGLE_TOOLS_LIB', true);
 require __DIR__ . '/google_tools.php';
 $G = require __DIR__ . '/gen-config.php';
-$opt = getopt('', ['candidats::', 'dry']);
+$opt = getopt('', ['candidats::', 'dry', 'mail-last']);
+const NR_MAIL_TO = 'e.guenver@gmail.com';
+const NR_ADMIN = 'https://fabrique.caen.pro/_admin/niches';
+const NR_LAST = __DIR__ . '/niche_last.json';
 $nCand = (int)($opt['candidats'] ?? 20);
 @proc_nice(10);
 
@@ -39,6 +43,29 @@ function nr_fab(array $G, string $route, ?array $body = null): array
     return is_array($j) ? $j : [];
 }
 
+function nr_mail(array $report, array $CFG): string
+{
+    $e = fn($x) => htmlspecialchars((string)$x, ENT_QUOTES);
+    $html = '<div style="font-family:Arial,sans-serif;max-width:680px"><h2>Idées de sites de niche — ' . $e($report['at']) . '</h2>'
+        . '<p>' . (int)$report['candidats'] . ' niches analysées (tendances Google, actualités, Search Console, données publiques). Les 5 meilleures :</p>';
+    foreach ($report['top'] as $i => $c) {
+        $m = $c['mesures'] ?? [];
+        $html .= '<div style="border:1px solid #ddd;border-radius:10px;padding:12px 16px;margin:10px 0"><h3 style="margin:0">' . ($i + 1) . '. ' . $e($c['name']) . ' — score ' . (int)$c['score'] . '/100</h3>'
+            . '<p style="margin:6px 0;color:#555">' . $e($c['sub']) . '.decouverte.org · ' . $e($c['tagline'] ?? '') . '</p><p style="margin:6px 0">' . $e($c['pourquoi'] ?? '') . '</p>'
+            . '<p style="margin:6px 0;font-size:13px;color:#555">Demande : ' . (int)($m['suggestions'] ?? 0) . ' suggestions Google · concurrence : ' . (int)($m['sites_autorite'] ?? 0) . ' gros sites sur ' . (int)($m['resultats_analyses'] ?? 0) . ' · RPM estimé : ' . $e($m['rpm'] ?? '') . ' €'
+            . (!empty($c['donnees']) ? ' · données publiques : ' . $e($c['donnees']) : '') . '</p></div>';
+    }
+    if (!empty($report['autres'])) $html .= '<p><b>Autres pistes :</b> ' . implode(', ', array_map(fn($c) => $e($c['name']) . ' (' . (int)$c['score'] . ')', $report['autres'])) . '</p>';
+    $html .= '<p><a href="' . NR_ADMIN . '" style="background:#0b6e4f;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Créer un de ces sites en un clic</a></p></div>';
+    $subject = 'Fabrique : ' . count($report['top']) . ' idées de sites de niche (' . date('m/Y') . ')';
+    try {
+        if (function_exists('tool_gmail_send')) { $r = tool_gmail_send(['to' => [NR_MAIL_TO], 'subject' => $subject, 'body' => $html, 'html' => true, 'confirm' => true], $CFG); if (!empty($r['sent'])) return 'gmail ok'; }
+    } catch (Throwable $ex) { nr_say('gmail : ' . $ex->getMessage()); }
+    return mail(NR_MAIL_TO, '=?UTF-8?B?' . base64_encode($subject) . '?=', $html, "MIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8") ? 'mail() ok' : 'échec envoi';
+}
+
+if (isset($opt['mail-last'])) { $r = json_decode((string)@file_get_contents(NR_LAST), true); if (!$r) exit("aucun rapport\n"); nr_say(nr_mail($r, $CFG)); exit; }
+
 // ---------- 1. Signaux ----------
 $existing = [];
 foreach (glob(__DIR__ . '/gen-config*.php') as $f) {
@@ -50,6 +77,9 @@ nr_say(count($existing) . ' sites existants');
 preg_match_all('#<title>([^<]+)</title>#', nr_get('https://trends.google.fr/trending/rss?geo=FR'), $m);
 $trends = array_slice(array_map('html_entity_decode', $m[1] ?? []), 1, 25);
 nr_say(count($trends) . ' tendances Google');
+preg_match_all('#<item><title>([^<]+)</title>#', nr_get('https://news.google.com/rss?hl=fr&gl=FR&ceid=FR:fr'), $m);
+$news = array_slice(array_map(fn($t) => preg_replace('/ - [^-]+$/', '', html_entity_decode($t)), $m[1] ?? []), 0, 30);
+nr_say(count($news) . ' titres d\'actualité');
 
 $gscQueries = [];
 try {
@@ -71,6 +101,7 @@ nr_say(count($datasets) . ' jeux data.gouv');
 $prompt = "Tu es un expert en sites de niche monétisés (AdSense France + affiliation Amazon.fr) et en SEO francophone.\n"
     . "Sites déjà existants (NE PAS reproposer ces thèmes) :\n" . implode("\n", $existing) . "\n\n"
     . "Tendances Google France du moment :\n" . implode(', ', $trends) . "\n\n"
+    . "Titres d'actualité du moment (à utiliser pour repérer des besoins DURABLES qui émergent : nouvelle réglementation, nouvelle technologie, nouvelle aide, changement d'usage — pas pour faire un site d'actualité) :\n" . implode("\n", $news) . "\n\n"
     . "Requêtes où nos sites apparaissent déjà dans Google sans être en tête (demande avérée) :\n" . implode("\n", $gscQueries) . "\n\n"
     . "Jeux de données publics français populaires (automatisation possible, comme nos pages prix carburants / offres d'emploi) :\n" . implode(' | ', $datasets) . "\n\n"
     . "Propose $nCand niches de sites DISTINCTES pour la France : sujets durables (pas d'actualité), fort volume de recherches longue traîne, bon revenu publicitaire, "
@@ -142,5 +173,7 @@ usort($scored, fn($x, $y) => $y['score'] <=> $x['score']);
 $top = array_slice($scored, 0, 5);
 $report = ['at' => date('Y-m-d H:i'), 'candidats' => count($scored), 'top' => $top, 'autres' => array_map(fn($c) => ['sub' => $c['sub'], 'name' => $c['name'], 'score' => $c['score']], array_slice($scored, 5))];
 if (isset($opt['dry'])) { echo json_encode($report, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), "\n"; exit; }
+file_put_contents(NR_LAST, json_encode($report, JSON_UNESCAPED_UNICODE));
 $r = nr_fab($G, 'niches', $report);
 nr_say('envoyé à la fabrique : ' . json_encode($r));
+nr_say('e-mail : ' . nr_mail($report, $CFG));
