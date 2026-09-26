@@ -21,6 +21,7 @@ function api_main(string $route): void
             case 'ingest': api_out(api_ingest($in)); return;
             case 'fail': api_out(api_fail($in)); return;
             case 'stats': api_out(api_stats()); return;
+            case 'niches': setting_set('niche_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true, 'top' => count($in['top'] ?? [])]); return;
             case 'adsense': setting_set('adsense_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true]); return;
             case 'sites': api_out(registry()->query("SELECT host,name,niche,status,gen,per_day FROM sites WHERE status<>'deleted'")->fetchAll()); return;
             default: api_out(['error' => 'route'], 404);

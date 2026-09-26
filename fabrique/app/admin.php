@@ -22,6 +22,7 @@ function admin_main(string $path): void
         case $route === 'new': admin_site_form(null); return;
         case $route === 'settings': admin_settings(); return;
         case $route === 'log': admin_log(); return;
+        case $route === 'niches': admin_niches(); return;
         case (bool)preg_match('#^site/([a-z0-9.\-]+)(?:/(edit|delete|topics|toggle|run))?$#', $route, $m):
             $s = site_by_host($m[1]);
             if (!$s) { admin_page('Introuvable', '<p>Site inconnu.</p>'); return; }
@@ -73,7 +74,7 @@ table{border-collapse:collapse;width:100%;background:#fff;font-size:.9rem}th,td{
 textarea{min-height:90px}button,.btn{background:#0b6e4f;color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer;font:inherit;text-decoration:none;display:inline-block}.btn.g{background:#6c757d}.btn.r,button.r{background:#b32d2e}
 .err{color:#b32d2e;font-weight:600}.ok{color:#0b6e4f;font-weight:600}.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.78rem;background:#e7f3ee;color:#0b6e4f}.tag.off{background:#fbeaea;color:#b32d2e}
 .kpi{display:flex;gap:14px;flex-wrap:wrap}.kpi div{background:#fff;border:1px solid #e3e5e8;border-radius:10px;padding:12px 18px}.kpi b{display:block;font-size:1.5rem}.inline{display:inline}.inline button{padding:4px 10px;font-size:.85rem}
-</style></head><body>' . ($nav ? '<div class="top"><b>🏭 Fabrique à sites</b><a href="/_admin/">Sites</a><a href="/_admin/new">+ Ajouter un site</a><a href="/_admin/log">Journal</a><a href="/_admin/settings">Réglages</a><a href="/_admin/logout">Quitter</a></div>' : '')
+</style></head><body>' . ($nav ? '<div class="top"><b>🏭 Fabrique à sites</b><a href="/_admin/">Sites</a><a href="/_admin/new">+ Ajouter un site</a><a href="/_admin/niches">Idées de niches</a><a href="/_admin/log">Journal</a><a href="/_admin/settings">Réglages</a><a href="/_admin/logout">Quitter</a></div>' : '')
         . '<div class="w"><h1>' . h($title) . '</h1>' . $body . '</div></body></html>';
 }
 
@@ -228,6 +229,29 @@ function admin_settings(): void
     $f = '';
     foreach ($keys as $k => $l) $f .= '<label>' . h($l) . ($k === 'ads_txt_extra' ? '<textarea name="' . $k . '">' . h(setting($k, '')) . '</textarea>' : '<input name="' . $k . '" value="' . h(setting($k, $k === 'adsense_pub' ? 'ca-pub-8104956615440701' : '')) . '">') . '</label>';
     admin_page('Réglages', $msg . '<form method="post" class="box">' . csrf() . $f . '<button>Enregistrer</button></form>');
+}
+
+function admin_niches(): void
+{
+    $r = json_decode((string)setting('niche_report', ''), true);
+    if (!$r) { admin_page('Idées de niches', '<p>Aucune analyse pour le moment : la recherche automatique tourne le 1er de chaque mois sur le hub.</p>'); return; }
+    $roots = (array)cfg('cpanel_domains', []);
+    $o = '<p>Analyse du ' . h($r['at']) . ' — ' . (int)$r['candidats'] . ' niches évaluées (demande Google Suggest, concurrence de la 1re page, données publiques, revenu estimé). Les 5 meilleures :</p>';
+    foreach ($r['top'] ?? [] as $c) {
+        $m = $c['mesures'] ?? [];
+        $hidden = '';
+        foreach (['sub' => $c['sub'] ?? '', 'root' => $roots[0] ?? '', 'name' => $c['name'] ?? '', 'tagline' => $c['tagline'] ?? '', 'niche' => $c['niche'] ?? '',
+            'seeds' => implode("\n", (array)($c['seeds'] ?? [])), 'categories' => implode(', ', (array)($c['categories'] ?? [])), 'per_day' => '3', 'min_words' => '1200', 'gen' => '1', 'adsense' => '1', 'amazon' => '1'] as $k => $v)
+            $hidden .= '<input type="hidden" name="' . $k . '" value="' . h((string)$v) . '">';
+        $o .= '<div class="box"><h2 style="margin:0">' . h($c['name'] ?? '') . ' <span class="tag">score ' . (int)$c['score'] . '/100</span></h2>'
+            . '<p><b>' . h($c['tagline'] ?? '') . '</b> — ' . h($c['niche'] ?? '') . '</p><p><small>' . h($c['pourquoi'] ?? '') . '</small></p>'
+            . '<p><small>Demande : ' . (int)($m['suggestions'] ?? 0) . ' suggestions Google · 1re page : ' . (int)($m['sites_autorite'] ?? 0) . ' sites d\'autorité / ' . (int)($m['forums_ugc'] ?? 0) . ' forums sur ' . (int)($m['resultats_analyses'] ?? 0)
+            . ' · données publiques : ' . (int)($m['jeux_datagouv'] ?? 0) . ' jeux' . (!empty($c['donnees']) ? ' (' . h($c['donnees']) . ')' : '') . ' · revenu estimé ' . h((string)($m['rpm'] ?? '?')) . ' € / 1000 pages</small></p>'
+            . '<p><small>Graines : ' . h(implode(', ', (array)($c['seeds'] ?? []))) . '</small></p>'
+            . '<form method="post" action="/_admin/new">' . csrf() . $hidden . '<button>Créer ' . h(($c['sub'] ?? '') . '.' . ($roots[0] ?? '')) . '</button></form></div>';
+    }
+    if (!empty($r['autres'])) $o .= '<div class="box"><b>Autres idées :</b> ' . implode(', ', array_map(fn($c) => h($c['name']) . ' (' . (int)$c['score'] . ')', $r['autres'])) . '</div>';
+    admin_page('Idées de niches', $o);
 }
 
 function admin_log(): void
