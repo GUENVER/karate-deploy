@@ -125,6 +125,7 @@ function admin_site_form(?array $s): void
     $roots = (array)cfg('cpanel_domains', []);
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = $_POST;
+        $f['sub'] = strtolower((string)preg_replace('/\..*$/', '', trim((string)($f['sub'] ?? '')))); // « jardin.decouverte.org » → « jardin »
         $host = $s['host'] ?? strtolower(trim(($f['sub'] ?? '') !== '' ? $f['sub'] . '.' . $f['root'] : ($f['host'] ?? '')));
         $host = preg_replace('/[^a-z0-9.\-]/', '', $host);
         $data = [
