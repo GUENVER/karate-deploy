@@ -3,7 +3,7 @@
 Fichier annuel du contrôle sanitaire (ministère de la Santé, data.gouv.fr, ~1,2 Go décompressé) : trop lourd
 pour l'hébergement mutualisé, agrégé ici puis poussé par /_api/commune_extra (kind=eau).
 Config : /opt/fabrique/randos.env (FAB_API, FAB_TOKEN) + COMMUNE_HOST."""
-import csv, io, json, time, urllib.request, zipfile
+import csv, io, json, time, urllib.error, urllib.request, zipfile
 from collections import defaultdict
 
 env = dict(l.strip().split('=', 1) for l in open('/opt/fabrique/randos.env') if '=' in l and not l.startswith('#'))
@@ -65,7 +65,11 @@ for insee, us in com_udi.items():
 print(len(rows), 'communes')
 
 items = list(rows.items())
-for i in range(0, len(items), 2000):
-    body = json.dumps({'host': HOST, 'kind': 'eau', 'rows': dict(items[i:i + 2000])}).encode()
-    req = urllib.request.Request(env['FAB_API'].rstrip('/') + '/_api/commune_extra', data=body, headers={**UA, 'Content-Type': 'application/json', 'X-Fabrique-Token': env['FAB_TOKEN']})
-    print(urllib.request.urlopen(req, timeout=120).read().decode())
+for i in range(0, len(items), 1000):
+    body = json.dumps({'host': HOST, 'kind': 'eau', 'rows': dict(items[i:i + 1000])}).encode()
+    for attempt in range(5):  # base verrouillée pendant une synchronisation : on réessaie
+        req = urllib.request.Request(env['FAB_API'].rstrip('/') + '/_api/commune_extra', data=body, headers={**UA, 'Content-Type': 'application/json', 'X-Fabrique-Token': env['FAB_TOKEN']})
+        try:
+            print(urllib.request.urlopen(req, timeout=120).read().decode()); break
+        except urllib.error.HTTPError as e:
+            print('erreur', e.code, e.read().decode()[:200]); time.sleep(60)

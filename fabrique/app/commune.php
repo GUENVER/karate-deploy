@@ -29,14 +29,14 @@ function commune_db(string $host): PDO
     return $db;
 }
 
-function commune_dl(string $url, string $file): string
+function commune_dl(string $url, string $file, int $min = 1000): string
 {
     $fh = fopen($file, 'w');
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_FILE => $fh, CURLOPT_TIMEOUT => 900, CURLOPT_FOLLOWLOCATION => true, CURLOPT_USERAGENT => 'Mozilla/5.0 (fabrique)']);
     $ok = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     curl_close($ch); fclose($fh);
-    if (!$ok || $code !== 200 || filesize($file) < 1000) throw new RuntimeException("téléchargement $url : HTTP $code");
+    if (!$ok || $code !== 200 || filesize($file) < $min) throw new RuntimeException("téléchargement $url : HTTP $code");
     return $file;
 }
 
@@ -159,7 +159,7 @@ function commune_sync_delinq(PDO $db, string $dir): int
     $num = fn($v) => $v === 'NA' || $v === '' ? null : (float)str_replace(',', '.', $v);
     // départements + France
     $in = fopen(commune_dl((string)cfg('delinq_dep_url', DELINQ_DEP_URL), "$dir/delinq_dep.csv"), 'r');
-    $h = array_map(fn($x) => trim(preg_replace('/^\xEF\xBB\xBF/', '', $x)), fgetcsv($in, 0, ';', '"', ''));
+    $h = array_map(fn($x) => trim(preg_replace('/^\xEF\xBB\xBF/', '', $x), "\" \r\n"), fgetcsv($in, 0, ';', '"', ''));
     $ix = array_flip($h); $last = 0; $rows = [];
     while (($r = fgetcsv($in, 0, ';', '"', '')) !== false) { $y = (int)$r[$ix['annee']]; $last = max($last, $y); $rows[] = $r; }
     fclose($in); @unlink("$dir/delinq_dep.csv");
@@ -207,9 +207,9 @@ function commune_sync_delinq(PDO $db, string $dir): int
 function edu_csv(string $ds, string $where, string $file): Generator
 {
     $url = 'https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/' . $ds . '/exports/csv?delimiter=%3B' . ($where ? '&where=' . rawurlencode($where) : '');
-    $in = fopen(commune_dl($url, $file), 'r');
-    $h = array_map(fn($x) => trim(preg_replace('/^\xEF\xBB\xBF/', '', $x)), fgetcsv($in, 0, ';', '"', ''));
-    while (($r = fgetcsv($in, 0, ';', '"', '')) !== false) yield array_combine($h, array_pad(array_slice($r, 0, count($h)), count($h), ''));
+    $in = fopen(commune_dl($url, $file, 10), 'r'); // un export vide (session pas encore publiée) est normal
+    $h = array_map(fn($x) => trim(preg_replace('/^\xEF\xBB\xBF/', '', $x), "\" \r\n"), fgetcsv($in, 0, ';', '"', '') ?: []);
+    while ($h && ($r = fgetcsv($in, 0, ';', '"', '')) !== false) yield array_combine($h, array_pad(array_slice($r, 0, count($h)), count($h), ''));
     fclose($in); @unlink($file);
 }
 
