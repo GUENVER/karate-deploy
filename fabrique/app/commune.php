@@ -399,12 +399,12 @@ function page_commune(array $site, string $dept, string $slug): string
     $eau = commune_extra($db, $c['insee'], 'eau');
     if ($eau) {
         $body .= '<h2>Qualité de l\'eau du robinet à ' . h($name) . '</h2>'
-            . '<div class="kpi"><div><b>' . pct((float)$eau['conf_bact']) . '</b>prélèvements conformes (bactériologie)</div><div><b>' . pct((float)$eau['conf_chim']) . '</b>conformes (physico-chimie)</div>'
+            . '<div class="kpi">' . (isset($eau['conf_bact']) ? '<div><b>' . pct((float)$eau['conf_bact']) . '</b>analyses conformes (bactériologie)</div>' : '') . (isset($eau['conf_chim']) ? '<div><b>' . pct((float)$eau['conf_chim']) . '</b>conformes (physico-chimie)</div>' : '')
             . (isset($eau['no3']) ? '<div><b>' . number_format((float)$eau['no3'], 1, ',', ' ') . ' mg/L</b>nitrates (limite 50)</div>' : '')
             . (isset($eau['th']) ? '<div><b>' . number_format((float)$eau['th'], 1, ',', ' ') . ' °f</b>dureté : ' . ($eau['th'] < 15 ? 'eau douce' : ($eau['th'] < 30 ? 'eau moyennement calcaire' : 'eau calcaire')) . '</div>' : '') . '</div>'
             . '<p>' . (int)$eau['n'] . ' prélèvement(s) analysé(s) par l\'agence régionale de santé en ' . h((string)$eau['year']) . (!empty($eau['reseau']) ? ' sur le réseau « ' . h($eau['reseau']) . ' »' : '') . '. '
             . (!empty($eau['last']) ? 'Dernière conclusion (' . h(date_fr($eau['last_date'])) . ') : « ' . h($eau['last']) . ' »' : '') . '</p>';
-        $faq[] = ['q' => 'L\'eau du robinet est-elle potable à ' . $name . ' ?', 'a' => pct((float)$eau['conf_bact']) . ' des prélèvements de ' . $eau['year'] . ' sont conformes pour la bactériologie et ' . pct((float)$eau['conf_chim']) . ' pour la physico-chimie.' . (!empty($eau['last']) ? ' Dernière conclusion : ' . $eau['last'] : '')];
+        if (isset($eau['conf_bact'], $eau['conf_chim'])) $faq[] = ['q' => 'L\'eau du robinet est-elle potable à ' . $name . ' ?', 'a' => pct((float)$eau['conf_bact']) . ' des prélèvements de ' . $eau['year'] . ' sont conformes pour la bactériologie et ' . pct((float)$eau['conf_chim']) . ' pour la physico-chimie.' . (!empty($eau['last']) ? ' Dernière conclusion : ' . $eau['last'] : '')];
         if (isset($eau['th'])) $faq[] = ['q' => 'L\'eau est-elle calcaire à ' . $name . ' ?', 'a' => 'La dureté moyenne mesurée est de ' . number_format((float)$eau['th'], 1, ',', ' ') . ' °f (' . ($eau['th'] < 15 ? 'eau douce' : ($eau['th'] < 30 ? 'moyennement calcaire' : 'calcaire, un adoucisseur ou une carafe filtrante peut être utile')) . ').'];
     }
     // Écoles
