@@ -80,17 +80,23 @@ textarea{min-height:90px}button,.btn{background:#0b6e4f;color:#fff;border:0;bord
 function admin_dashboard(): void
 {
     $rows = ''; $tot = ['posts' => 0, 'posts_7d' => 0, 'pv_7d' => 0, 'pv_30d' => 0, 'queued' => 0];
+    // revenus AdSense poussés chaque jour par le hub (clé = domaine AdSense, avec ou sans www)
+    $ads = json_decode((string)setting('adsense_report', ''), true) ?: [];
+    $earn = fn(array $rep, string $host) => array_sum(array_map(fn($r) => in_array(preg_replace('/^www\./', '', $r['domain']), [preg_replace('/^www\./', '', $host)], true) ? (float)$r['earnings'] : 0, $rep['sites'] ?? []));
     foreach (registry()->query("SELECT * FROM sites WHERE status<>'deleted' ORDER BY host") as $s) {
         $st = site_stats($s);
         foreach ($tot as $k => $v) $tot[$k] += $st[$k];
         $rows .= '<tr><td><a href="/_admin/site/' . h($s['host']) . '"><b>' . h($s['host']) . '</b></a><br><small>' . h($s['name']) . '</small></td>'
             . '<td>' . ($s['status'] === 'active' ? '<span class="tag">en ligne</span>' : '<span class="tag off">' . h($s['status']) . '</span>') . ' ' . ($s['gen'] ? '<span class="tag">IA ' . (float)$s['per_day'] . '/j</span>' : '<span class="tag off">IA off</span>') . '</td>'
             . '<td>' . $st['posts'] . ' <small>(+' . $st['posts_7d'] . ' /7j)</small></td><td>' . $st['queued'] . '</td><td>' . $st['pv_7d'] . '</td><td>' . $st['pv_30d'] . '</td>'
+            . '<td>' . number_format($earn($ads['d7'] ?? [], $s['host']), 2, ',', ' ') . ' €</td><td>' . number_format($earn($ads['d30'] ?? [], $s['host']), 2, ',', ' ') . ' €</td>'
             . '<td><small>' . h((string)$st['last_post']) . '</small></td>'
             . '<td><a href="https://' . h($s['host']) . '/" target="_blank">voir</a> · <a href="/_admin/site/' . h($s['host']) . '/edit">modifier</a></td></tr>';
     }
-    $kpi = '<div class="kpi"><div><b>' . $tot['posts'] . '</b>articles</div><div><b>' . $tot['posts_7d'] . '</b>publiés /7j</div><div><b>' . $tot['queued'] . '</b>sujets en file</div><div><b>' . $tot['pv_7d'] . '</b>pages vues /7j</div><div><b>' . $tot['pv_30d'] . '</b>pages vues /30j</div></div>';
-    admin_page('Sites', $kpi . '<div class="box" style="padding:0;overflow:auto"><table><tr><th>Site</th><th>État</th><th>Articles</th><th>File</th><th>PV 7j</th><th>PV 30j</th><th>Dernier article</th><th></th></tr>' . $rows . '</table></div>'
+    $kpi = '<div class="kpi"><div><b>' . $tot['posts'] . '</b>articles</div><div><b>' . $tot['posts_7d'] . '</b>publiés /7j</div><div><b>' . $tot['queued'] . '</b>sujets en file</div><div><b>' . $tot['pv_7d'] . '</b>pages vues /7j</div><div><b>' . $tot['pv_30d'] . '</b>pages vues /30j</div>'
+        . '<div><b>' . number_format((float)($ads['d7']['total'] ?? 0), 2, ',', ' ') . ' €</b>AdSense /7j (compte)</div><div><b>' . number_format((float)($ads['d30']['total'] ?? 0), 2, ',', ' ') . ' €</b>AdSense /30j (compte)</div></div>'
+        . (isset($ads['at']) ? '<p><small>Revenus AdSense estimés, mis à jour le ' . h($ads['at']) . ' (tous domaines du compte, y compris hors fabrique).</small></p>' : '<p><small>Revenus AdSense : en attente de la première synchronisation du hub.</small></p>');
+    admin_page('Sites', $kpi . '<div class="box" style="padding:0;overflow:auto"><table><tr><th>Site</th><th>État</th><th>Articles</th><th>File</th><th>PV 7j</th><th>PV 30j</th><th>AdSense 7j</th><th>AdSense 30j</th><th>Dernier article</th><th></th></tr>' . $rows . '</table></div>'
         . '<p><a class="btn" href="/_admin/new">+ Ajouter un site</a></p>');
 }
 

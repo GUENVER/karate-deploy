@@ -6,6 +6,7 @@
 //   php google_tools.php verify-token <domaine>          -> jeton TXT à poser dans le DNS (propriété Domaine)
 //   php google_tools.php verify <domaine>                -> vérifie (DNS) puis ajoute sc-domain:<domaine>
 //   php google_tools.php sitemap <propriété> <url>       -> soumet un sitemap
+//   php google_tools.php push                            -> envoie les revenus AdSense aux fabriques (cron quotidien)
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli' && !defined('GOOGLE_TOOLS_LIB')) exit;
 
@@ -78,6 +79,21 @@ if (PHP_SAPI === 'cli' && !defined('GOOGLE_TOOLS_LIB')) {
             'sitemap' => (function () use ($argv) {
                 gt_req('PUT', 'https://www.googleapis.com/webmasters/v3/sites/' . rawurlencode($argv[2]) . '/sitemaps/' . rawurlencode($argv[3]));
                 return ['ok' => $argv[3]];
+            })(),
+            'push' => (function () {
+                // envoie les revenus (7 j et 30 j) à chaque fabrique connue du générateur
+                $rep = ['d7' => adsense_report(7), 'd30' => adsense_report(30), 'at' => date('Y-m-d H:i')];
+                $done = [];
+                foreach (glob('/home3/guenver/fabrique-gen/gen-config*.php') as $f) {
+                    $G = include $f;
+                    $ch = curl_init(rtrim($G['api_base'], '/') . '/_api/adsense');
+                    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_TIMEOUT => 30, CURLOPT_POSTFIELDS => json_encode($rep),
+                        CURLOPT_HTTPHEADER => ['X-Fabrique-Token: ' . $G['api_token'], 'Content-Type: application/json']]);
+                    curl_exec($ch);
+                    $done[$G['api_base']] = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+                    curl_close($ch);
+                }
+                return ['total_30j' => $rep['d30']['total'], 'fabriques' => $done];
             })(),
             default => ['usage' => 'adsense [jours] | gsc-list | verify-token <domaine> | verify <domaine> | sitemap <propriété> <url>'],
         };
