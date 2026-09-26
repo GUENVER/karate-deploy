@@ -1,0 +1,5 @@
+[{"sub": "ma-commune", "root": "decouverte.org", "name": "Ma Commune en chiffres", "tagline": "Immobilier, risques, énergie : tout savoir sur votre commune",
+  "niche": "Guides pratiques pour acheter, vendre, louer ou s'installer dans une commune en France : comprendre les prix de l'immobilier et leur évolution, estimer un bien, lire un DPE, connaître les risques naturels (inondation, retrait-gonflement des argiles, radon) et les démarches (état des risques, taxe foncière, déménagement, inscription en mairie). Ton factuel, sources officielles, jamais de chiffres inventés.",
+  "seeds": ["prix m2 immobilier", "estimer sa maison", "état des risques et pollutions", "risque inondation maison", "retrait gonflement argile", "taxe foncière calcul", "déménager checklist", "acheter maison ancienne conseils"],
+  "categories": ["Acheter et vendre", "Prix de l'immobilier", "Risques et assurances", "Énergie et DPE", "Déménager et s'installer", "Impôts locaux"],
+  "color": "#1f5f8b", "per_day": 3, "min_words": 1300, "ymyl": 1, "commune": 1}]

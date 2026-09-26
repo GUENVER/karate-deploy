@@ -61,6 +61,7 @@ function layout(array $site, array $m, string $body): string
     $nav = '';
     if (!empty($site['fuel'])) $nav .= '<a href="/prix-carburant/"><strong>Prix carburant</strong></a>';
     if (function_exists('places_mod') && ($pm = places_mod($site))) $nav .= '<a href="/' . $pm['prefix'] . '/"><strong>' . h($pm['nav']) . '</strong></a>';
+    if (!empty($site['commune'])) $nav .= '<a href="/commune/"><strong>Fiches communes</strong></a>';
     if (!empty($site['dpe'])) $nav .= '<a href="/dpe/"><strong>DPE de votre commune</strong></a>';
     if (!empty($site['ev'])) $nav .= '<a href="/bornes-recharge/"><strong>Bornes de recharge</strong></a>';
     if (!empty($site['jobs']) && function_exists('jobs_db') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' LIMIT 1")->fetchColumn()) $nav .= '<a href="/offres-emploi/"><strong>Offres d\'emploi</strong></a>';
@@ -122,6 +123,7 @@ function page_home(array $site, int $page): string
     $body = $page == 1 ? '<h1 style="margin:28px 0 0;font-size:1.7rem">' . h($site['name']) . ' — ' . h($site['tagline']) . '</h1>' : '<h1 style="margin:28px 0 0;font-size:1.5rem">Articles — page ' . $page . '</h1>';
     if ($page == 1 && !empty($site['fuel']) && function_exists('fuel_home_block')) $body .= fuel_home_block($site) . '<h2>Nos derniers guides</h2>';
     if ($page == 1 && function_exists('places_mod') && places_mod($site) && ($pb = places_home_block($site))) $body .= $pb . '<h2>Nos derniers guides</h2>';
+    if ($page == 1 && !empty($site['commune']) && function_exists('commune_home_block') && ($cb = commune_home_block($site))) $body .= $cb . '<h2>Nos derniers guides</h2>';
     if ($page == 1 && !empty($site['dpe']) && function_exists('dpe_home_block') && ($db_ = dpe_home_block($site))) $body .= $db_ . '<h2>Nos derniers guides</h2>';
     if ($page == 1 && !empty($site['ev']) && function_exists('ev_home_block') && ($eb = ev_home_block($site))) $body .= $eb . '<h2>Nos derniers guides</h2>';
     $body .= '<div class="grid">' . implode('', array_map('card', $posts)) . '</div>' . pager('/', $page, $pages);

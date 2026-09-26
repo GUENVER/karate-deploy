@@ -44,6 +44,7 @@ function registry(): PDO
     if (!in_array('jobs', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN jobs INTEGER DEFAULT 0');
     if (!in_array('fuel', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN fuel INTEGER DEFAULT 0');
     if (!in_array('ev', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN ev INTEGER DEFAULT 0');
+    if (!in_array('commune', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN commune INTEGER DEFAULT 0');
     if (!in_array('dpe', $cols, true)) $db->exec('ALTER TABLE sites ADD COLUMN dpe INTEGER DEFAULT 0');
     if (!in_array('places', $cols, true)) $db->exec("ALTER TABLE sites ADD COLUMN places TEXT DEFAULT ''");
     return $db;
