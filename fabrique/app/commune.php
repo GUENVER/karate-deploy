@@ -22,7 +22,8 @@ function commune_db(string $host): PDO
         CREATE TABLE IF NOT EXISTS dvf(insee TEXT PRIMARY KEY, n_apt INTEGER, med_apt INTEGER, n_mai INTEGER, med_mai INTEGER, n_all INTEGER, med_all INTEGER);
         CREATE TABLE IF NOT EXISTS dvf_year(insee TEXT, year INTEGER, n INTEGER, moy INTEGER, PRIMARY KEY(insee, year));
         CREATE TABLE IF NOT EXISTS risques(insee TEXT, risque TEXT, PRIMARY KEY(insee, risque));
-        CREATE TABLE IF NOT EXISTS catnat(insee TEXT PRIMARY KEY, n INTEGER, events TEXT);");
+        CREATE TABLE IF NOT EXISTS catnat(insee TEXT PRIMARY KEY, n INTEGER, events TEXT);
+        CREATE TABLE IF NOT EXISTS commune_extra(insee TEXT, kind TEXT, data TEXT, PRIMARY KEY(insee, kind));");
         $init[$host] = 1;
     }
     return $db;
@@ -127,8 +128,122 @@ function commune_sync(array $site, callable $log): array
         $db->commit(); $zip->close();
     }
     @unlink("$dir/gaspar.zip");
+    foreach (['delinq' => 'commune_sync_delinq', 'ecoles' => 'commune_sync_ecoles'] as $k => $fn) {
+        try { $out[$k] = $fn($db, $dir); $log("$k ok"); } catch (Throwable $e) { $out[$k] = 'erreur : ' . $e->getMessage(); }
+    }
     cache_clear($site['host']);
     return $out;
+}
+
+function commune_extra_set(PDO $db, string $kind, array $rows): int
+{
+    $st = $db->prepare('INSERT OR REPLACE INTO commune_extra VALUES(?,?,?)');
+    $db->beginTransaction();
+    foreach ($rows as $insee => $d) $st->execute([(string)$insee, $kind, json_encode($d, JSON_UNESCAPED_UNICODE)]);
+    $db->commit();
+    return count($rows);
+}
+
+function commune_extra(PDO $db, string $insee, string $kind): array
+{
+    $st = $db->prepare('SELECT data FROM commune_extra WHERE insee=? AND kind=?'); $st->execute([$insee, $kind]);
+    return json_decode((string)$st->fetchColumn(), true) ?: [];
+}
+
+// Délinquance enregistrée (SSMSI, ministère de l'Intérieur) : dernière année + précédente, taux département et France.
+const DELINQ_URL = 'https://static.data.gouv.fr/resources/bases-statistiques-communale-departementale-et-regionale-de-la-delinquance-enregistree-par-la-police-et-la-gendarmerie-nationales/20260709-115942/donnee-data.gouv-2025-geographie2026-produit-le2026-06-25.csv.gz';
+const DELINQ_DEP_URL = 'https://static.data.gouv.fr/resources/bases-statistiques-communale-departementale-et-regionale-de-la-delinquance-enregistree-par-la-police-et-la-gendarmerie-nationales/20260709-120038/donnee-dep-data.gouv-2025-geographie2026-produit-le2026-06-25.csv';
+
+function commune_sync_delinq(PDO $db, string $dir): int
+{
+    $num = fn($v) => $v === 'NA' || $v === '' ? null : (float)str_replace(',', '.', $v);
+    // départements + France
+    $in = fopen(commune_dl((string)cfg('delinq_dep_url', DELINQ_DEP_URL), "$dir/delinq_dep.csv"), 'r');
+    $h = array_map(fn($x) => trim(preg_replace('/^\xEF\xBB\xBF/', '', $x)), fgetcsv($in, 0, ';', '"', ''));
+    $ix = array_flip($h); $last = 0; $rows = [];
+    while (($r = fgetcsv($in, 0, ';', '"', '')) !== false) { $y = (int)$r[$ix['annee']]; $last = max($last, $y); $rows[] = $r; }
+    fclose($in); @unlink("$dir/delinq_dep.csv");
+    $dep = []; $fr = [];
+    foreach ($rows as $r) {
+        if ((int)$r[$ix['annee']] !== $last) continue;
+        $ind = $r[$ix['indicateur']]; $n = (float)$num($r[$ix['nombre']]); $pop = (float)$r[$ix['insee_pop']];
+        $dep['D' . ltrim($r[$ix['Code_departement']], '0')][$ind] = $num($r[$ix['taux_pour_mille']]);
+        $fr[$ind][0] = ($fr[$ind][0] ?? 0) + $n; $fr[$ind][1] = ($fr[$ind][1] ?? 0) + $pop;
+    }
+    $dep['FR'] = array_map(fn($x) => $x[1] ? 1000 * $x[0] / $x[1] : null, $fr);
+    commune_extra_set($db, 'delinq_ref', $dep);
+    // communes (fichier compressé, lecture en flux)
+    commune_dl((string)cfg('delinq_url', DELINQ_URL), "$dir/delinq.csv.gz");
+    $gz = gzopen("$dir/delinq.csv.gz", 'r');
+    $ix = array_flip(array_map(fn($x) => trim($x, "\"\xEF\xBB\xBF \r\n"), str_getcsv((string)gzgets($gz), ';', '"', '')));
+    // table de travail (le fichier n'est pas trié par commune) : 2 dernières années seulement
+    $db->exec('DROP TABLE IF EXISTS delinq_raw; CREATE TABLE delinq_raw(insee TEXT, ind TEXT, year INTEGER, n INTEGER, taux REAL, pop INTEGER)');
+    $st = $db->prepare('INSERT INTO delinq_raw VALUES(?,?,?,?,?,?)');
+    $db->beginTransaction(); $i = 0;
+    while (($l = gzgets($gz)) !== false) {
+        $r = str_getcsv(rtrim($l), ';', '"', '');
+        $y = (int)($r[$ix['annee']] ?? 0);
+        if ($y < $last - 1) continue;
+        $diff = $r[$ix['est_diffuse']] === 'diff';
+        $st->execute([$r[$ix['CODGEO_2026']], $r[$ix['indicateur']], $y, $diff ? (int)$num($r[$ix['nombre']]) : null, $diff ? $num($r[$ix['taux_pour_mille']]) : null, (int)$r[$ix['insee_pop']]]);
+        if (++$i % 50000 === 0) { $db->commit(); usleep(100000); $db->beginTransaction(); }
+    }
+    $db->commit(); gzclose($gz); @unlink("$dir/delinq.csv.gz");
+    $db->exec('CREATE INDEX ix_dr ON delinq_raw(insee)');
+    $acc = []; $n = 0; $cur = null;
+    foreach ($db->query('SELECT * FROM delinq_raw ORDER BY insee, ind, year') as $r) {
+        if ($r['insee'] !== $cur && count($acc) >= 2000) { $n += commune_extra_set($db, 'delinq', $acc); $acc = []; }
+        $cur = $r['insee'];
+        $acc[$cur]['year'] = $last;
+        if ((int)$r['year'] === $last) { $acc[$cur]['pop'] = (int)$r['pop']; $acc[$cur]['ind'][$r['ind']][0] = $r['n'] === null ? null : (int)$r['n']; $acc[$cur]['ind'][$r['ind']][1] = $r['taux'] === null ? null : (float)$r['taux']; }
+        else $acc[$cur]['ind'][$r['ind']][2] = $r['n'] === null ? null : (int)$r['n'];
+    }
+    $n += commune_extra_set($db, 'delinq', $acc);
+    $db->exec('DROP TABLE delinq_raw');
+    return $n;
+}
+
+// Écoles, collèges, lycées (annuaire de l'Éducation nationale) + résultats au brevet et au bac.
+function edu_csv(string $ds, string $where, string $file): Generator
+{
+    $url = 'https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/' . $ds . '/exports/csv?delimiter=%3B' . ($where ? '&where=' . rawurlencode($where) : '');
+    $in = fopen(commune_dl($url, $file), 'r');
+    $h = array_map(fn($x) => trim(preg_replace('/^\xEF\xBB\xBF/', '', $x)), fgetcsv($in, 0, ';', '"', ''));
+    while (($r = fgetcsv($in, 0, ';', '"', '')) !== false) yield array_combine($h, array_pad(array_slice($r, 0, count($h)), count($h), ''));
+    fclose($in); @unlink($file);
+}
+
+function commune_sync_ecoles(PDO $db, string $dir): int
+{
+    $res = [];
+    $y = (int)date('Y');
+    foreach ([$y, $y - 1, $y - 2] as $s) { // brevet : dernière session publiée
+        foreach (edu_csv('fr-en-dnb-par-etablissement', 'session="' . $s . '"', "$dir/dnb.csv") as $r) $res[$r['numero_d_etablissement']] = ['brevet' => (float)str_replace([',', '%'], ['.', ''], $r['taux_de_reussite']), 'session' => $s];
+        if ($res) break;
+    }
+    foreach (['fr-en-indicateurs-de-resultat-des-lycees-gt_v2', 'fr-en-indicateurs-de-resultat-des-lycees-pro_v2'] as $ds) {
+        foreach ([$y, $y - 1, $y - 2] as $s) {
+            $got = 0;
+            foreach (edu_csv($ds, 'year(annee)=' . $s, "$dir/ival.csv") as $r) {
+                if ($r['taux_reu_total'] === '') continue;
+                $res[$r['uai']] = ($res[$r['uai']] ?? []) + ['bac' => (float)$r['taux_reu_total'], 'va' => $r['va_reu_total'] === '' ? null : (float)$r['va_reu_total'], 'mentions' => $r['taux_men_total'] === '' ? null : (float)$r['taux_men_total'], 'session_bac' => $s];
+                $got++;
+            }
+            if ($got) break;
+        }
+    }
+    $acc = [];
+    foreach (edu_csv('fr-en-annuaire-education', 'etat="OUVERT"', "$dir/annuaire.csv") as $r) {
+        $t = $r['type_etablissement'];
+        if (!in_array($t, ['Ecole', 'Collège', 'Lycée'], true)) continue;
+        $sub = $t === 'Ecole' ? ($r['ecole_maternelle'] === '1' && $r['ecole_elementaire'] !== '1' ? 'maternelle' : ($r['ecole_elementaire'] === '1' && $r['ecole_maternelle'] !== '1' ? 'élémentaire' : 'primaire')) : '';
+        $e = array_filter(['uai' => $r['identifiant_de_l_etablissement'], 'nom' => $r['nom_etablissement'], 'type' => $t, 'sub' => $sub, 'statut' => $r['statut_public_prive'],
+            'voies' => implode(', ', array_keys(array_filter(['générale' => $r['voie_generale'] === '1', 'technologique' => $r['voie_technologique'] === '1', 'professionnelle' => $r['voie_professionnelle'] === '1'])))]
+            + ($res[$r['identifiant_de_l_etablissement']] ?? []), fn($v) => $v !== '' && $v !== null);
+        $acc[$r['code_commune']][] = $e;
+        if ($p = commune_parent($r['code_commune'])) $acc[$p][] = $e; // Paris, Lyon, Marseille : aussi sur la fiche de la ville
+    }
+    return commune_extra_set($db, 'ecoles', $acc);
 }
 
 function commune_parent(string $code): ?string
@@ -161,7 +276,7 @@ function commune_guides(array $site, int $n = 6): string
 function commune_footer(): string
 {
     return '<p class="disc">Sources publiques (Licence Ouverte Etalab) : découpage et population légale (geo.api.gouv.fr / Insee), demandes de valeurs foncières DVF (DGFiP, statistiques Etalab), '
-        . 'base GASPAR des risques majeurs et arrêtés de catastrophe naturelle (Géorisques), diagnostics de performance énergétique (ADEME). Données mises à jour chaque mois.</p>';
+        . 'base GASPAR des risques majeurs et arrêtés de catastrophe naturelle (Géorisques), diagnostics de performance énergétique (ADEME), contrôle sanitaire de l\'eau (ministère de la Santé), annuaire et résultats des établissements (Éducation nationale), délinquance enregistrée (SSMSI, ministère de l\'Intérieur). Données mises à jour chaque mois.</p>';
 }
 
 function commune_search_form(string $q = ''): string
@@ -279,6 +394,50 @@ function page_commune(array $site, string $dept, string $slug): string
         . implode('', array_map(fn($e) => '<li>' . h($e[1]) . ' — ' . h(date_fr($e[0])) . '</li>', array_slice($events, 0, 8))) . '</ul>' : '<p>Aucun arrêté de catastrophe naturelle recensé.</p>');
     $faq[] = ['q' => 'Quels sont les risques naturels à ' . $name . ' ?', 'a' => $risques ? implode(', ', $risques) . '.' : 'Aucun risque majeur n\'est recensé dans la base nationale GASPAR.'];
     $faq[] = ['q' => 'Combien de catastrophes naturelles à ' . $name . ' ?', 'a' => !empty($cat['n']) ? $cat['n'] . ' arrêté(s) de catastrophe naturelle depuis 1982, le dernier pour « ' . $events[0][1] . ' » (' . date_fr($events[0][0]) . ').' : 'Aucun arrêté de catastrophe naturelle n\'est recensé.'];
+    // Eau du robinet (poussé par le VPS)
+    $eau = commune_extra($db, $c['insee'], 'eau');
+    if ($eau) {
+        $body .= '<h2>Qualité de l\'eau du robinet à ' . h($name) . '</h2>'
+            . '<div class="kpi"><div><b>' . pct((float)$eau['conf_bact']) . '</b>prélèvements conformes (bactériologie)</div><div><b>' . pct((float)$eau['conf_chim']) . '</b>conformes (physico-chimie)</div>'
+            . (isset($eau['no3']) ? '<div><b>' . number_format((float)$eau['no3'], 1, ',', ' ') . ' mg/L</b>nitrates (limite 50)</div>' : '')
+            . (isset($eau['th']) ? '<div><b>' . number_format((float)$eau['th'], 1, ',', ' ') . ' °f</b>dureté : ' . ($eau['th'] < 15 ? 'eau douce' : ($eau['th'] < 30 ? 'eau moyennement calcaire' : 'eau calcaire')) . '</div>' : '') . '</div>'
+            . '<p>' . (int)$eau['n'] . ' prélèvement(s) analysé(s) par l\'agence régionale de santé en ' . h((string)$eau['year']) . (!empty($eau['reseau']) ? ' sur le réseau « ' . h($eau['reseau']) . ' »' : '') . '. '
+            . (!empty($eau['last']) ? 'Dernière conclusion (' . h(date_fr($eau['last_date'])) . ') : « ' . h($eau['last']) . ' »' : '') . '</p>';
+        $faq[] = ['q' => 'L\'eau du robinet est-elle potable à ' . $name . ' ?', 'a' => pct((float)$eau['conf_bact']) . ' des prélèvements de ' . $eau['year'] . ' sont conformes pour la bactériologie et ' . pct((float)$eau['conf_chim']) . ' pour la physico-chimie.' . (!empty($eau['last']) ? ' Dernière conclusion : ' . $eau['last'] : '')];
+        if (isset($eau['th'])) $faq[] = ['q' => 'L\'eau est-elle calcaire à ' . $name . ' ?', 'a' => 'La dureté moyenne mesurée est de ' . number_format((float)$eau['th'], 1, ',', ' ') . ' °f (' . ($eau['th'] < 15 ? 'eau douce' : ($eau['th'] < 30 ? 'moyennement calcaire' : 'calcaire, un adoucisseur ou une carafe filtrante peut être utile')) . ').'];
+    }
+    // Écoles
+    $ec = commune_extra($db, $c['insee'], 'ecoles');
+    if ($ec) {
+        $cnt = array_count_values(array_column($ec, 'type'));
+        usort($ec, fn($a, $b) => [array_search($a['type'], ['Lycée', 'Collège', 'Ecole']), $a['nom']] <=> [array_search($b['type'], ['Lycée', 'Collège', 'Ecole']), $b['nom']]);
+        $row = fn($e) => '<tr><td>' . h(ucwords(mb_strtolower($e['nom']))) . '</td><td>' . h($e['type'] === 'Ecole' ? 'École ' . ($e['sub'] ?? '') : $e['type']) . (!empty($e['voies']) ? '<br><small>' . h($e['voies']) . '</small>' : '') . '</td><td>' . h($e['statut'] ?? '') . '</td><td>'
+            . (isset($e['bac']) ? 'Bac : <strong>' . pct((float)$e['bac']) . '</strong>' . (isset($e['va']) ? ' <small>(valeur ajoutée ' . ($e['va'] >= 0 ? '+' : '') . $e['va'] . ')</small>' : '') : '')
+            . (isset($e['brevet']) ? 'Brevet : <strong>' . pct((float)$e['brevet']) . '</strong>' : '') . '</td></tr>';
+        $body .= '<h2>Écoles, collèges et lycées à ' . h($name) . '</h2><p>' . implode(', ', array_map(fn($t, $n) => $n . ' ' . ($t === 'Ecole' ? 'école(s)' : mb_strtolower($t) . '(s)'), array_keys($cnt), $cnt)) . '.</p>'
+            . '<table><thead><tr><th>Établissement</th><th>Type</th><th>Secteur</th><th>Résultats</th></tr></thead><tbody>' . implode('', array_map($row, array_slice($ec, 0, 60))) . '</tbody></table>';
+        $best = array_values(array_filter($ec, fn($e) => isset($e['bac'])));
+        usort($best, fn($a, $b) => $b['bac'] <=> $a['bac']);
+        $faq[] = ['q' => 'Combien d\'écoles à ' . $name . ' ?', 'a' => implode(', ', array_map(fn($t, $n) => $n . ' ' . ($t === 'Ecole' ? 'école(s)' : mb_strtolower($t) . '(s)'), array_keys($cnt), $cnt)) . ' (annuaire de l\'Éducation nationale).'];
+        if ($best) $faq[] = ['q' => 'Quel est le meilleur lycée de ' . $name . ' ?', 'a' => 'Au bac ' . $best[0]['session_bac'] . ', le meilleur taux de réussite est celui de ' . ucwords(mb_strtolower($best[0]['nom'])) . ' (' . pct((float)$best[0]['bac']) . '). La valeur ajoutée, qui tient compte du profil des élèves, est un indicateur complémentaire.'];
+    }
+    // Délinquance
+    $dl = commune_extra($db, $c['insee'], 'delinq');
+    if (!empty($dl['ind'])) {
+        $ref = commune_extra($db, 'D' . ltrim($dept, '0'), 'delinq_ref'); $frr = commune_extra($db, 'FR', 'delinq_ref');
+        $tr = '';
+        foreach ($dl['ind'] as $ind => $v) {
+            if (str_contains($ind, '(AFD)')) continue;
+            $tr .= '<tr><td>' . h($ind) . '</td><td>' . (isset($v[0]) ? nf0($v[0]) : '<small>non diffusé</small>') . '</td><td>' . (isset($v[1]) ? number_format((float)$v[1], 2, ',', ' ') . ' ‰' : '—') . '</td><td>'
+                . (isset($ref[$ind]) ? number_format((float)$ref[$ind], 2, ',', ' ') . ' ‰' : '—') . '</td><td>' . (isset($frr[$ind]) ? number_format((float)$frr[$ind], 2, ',', ' ') . ' ‰' : '—') . '</td><td>'
+                . (isset($v[0], $v[2]) && $v[2] > 0 ? (($d = 100 * ($v[0] - $v[2]) / $v[2]) >= 0 ? '+' : '') . nf0($d) . ' %' : '—') . '</td></tr>';
+        }
+        $body .= '<h2>Sécurité et délinquance à ' . h($name) . '</h2><p>Faits enregistrés par la police et la gendarmerie en ' . (int)$dl['year'] . ', taux pour 1 000 habitants (ou logements pour les cambriolages), comparés au département et à la France.</p>'
+            . '<table><thead><tr><th>Indicateur</th><th>Nombre</th><th>Taux</th><th>' . h($dname) . '</th><th>France</th><th>Évolution sur 1 an</th></tr></thead><tbody>' . $tr . '</tbody></table>'
+            . '<p><small>« Non diffusé » : nombre trop faible pour être publié (secret statistique). Les faits sont comptés dans la commune où ils sont enregistrés.</small></p>';
+        $cb = $dl['ind']['Cambriolages de logement'] ?? null;
+        if (isset($cb[1])) $faq[] = ['q' => 'Y a-t-il beaucoup de cambriolages à ' . $name . ' ?', 'a' => nf0($cb[0]) . ' cambriolages de logement enregistrés en ' . $dl['year'] . ', soit ' . number_format((float)$cb[1], 2, ',', ' ') . ' pour 1 000 logements' . (isset($frr['Cambriolages de logement']) ? ' (France : ' . number_format((float)$frr['Cambriolages de logement'], 2, ',', ' ') . ' ‰)' : '') . '.'];
+    }
     // Voisines
     $near = [];
     if ($c['lat']) {

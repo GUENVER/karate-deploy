@@ -24,6 +24,9 @@ function api_main(string $route): void
             case 'niches': setting_set('niche_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true, 'top' => count($in['top'] ?? [])]); return;
             case 'adsense': setting_set('adsense_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true]); return;
             case 'post': api_out(api_post($in)); return;
+            case 'commune_extra': // données par commune calculées ailleurs (ex. qualité de l'eau depuis le VPS)
+                $s = need_site($in); if (empty($s['commune']) || !in_array($in['kind'] ?? '', ['eau'], true)) throw new RuntimeException('refusé');
+                api_out(['ok' => true, 'stored' => commune_extra_set(commune_db($s['host']), $in['kind'], (array)($in['rows'] ?? []))]); return;
             case 'places': // import poussé (ex. randonnées OpenStreetMap depuis le VPS) : lots de lignes, puis final=true pour purger les absentes
                 $s = need_site($in); if (!places_mod($s)) throw new RuntimeException('module lieux inactif');
                 $n = places_store($s, (array)($in['rows'] ?? []), (string)$in['stamp']);
