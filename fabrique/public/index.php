@@ -9,6 +9,7 @@ require dirname(__DIR__) . '/app/jobs.php';
 require dirname(__DIR__) . '/app/fuel.php';
 require dirname(__DIR__) . '/app/ev.php';
 require dirname(__DIR__) . '/app/places.php';
+require dirname(__DIR__) . '/app/dpe.php';
 
 $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
@@ -36,6 +37,7 @@ switch ($path) {
 }
 if (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) { out_sitemap_posts($site, (int)$m[1]); exit; }
 if ($site['jobs'] && preg_match('#^/sitemap-jobs-(\d+)\.xml$#', $path, $m)) { out_sitemap_jobs($site, (int)$m[1]); exit; }
+if (!empty($site['dpe']) && $path === '/sitemap-dpe.xml') { out_sitemap_dpe($site); exit; }
 if (places_mod($site) && $path === '/sitemap-lieux.xml') { out_sitemap_places($site); exit; }
 if (!empty($site['ev']) && preg_match('#^/sitemap-bornes-(\d+)\.xml$#', $path, $m)) { out_sitemap_ev($site, (int)$m[1]); exit; }
 if (!empty($site['fuel']) && preg_match('#^/sitemap-carburant-(\d+)\.xml$#', $path, $m)) { out_sitemap_fuel($site, (int)$m[1]); exit; }
@@ -89,6 +91,11 @@ function route(array $site, string $path): ?string
         if (preg_match('#^/prix-carburant/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m) && ($dept = dept_by_slug($m[1])))
             return empty($m[2]) ? page_fuel_dept($site, $dept) : page_fuel_city($site, $dept, $m[2]);
         if (preg_match('#^/station/([a-z0-9\-]+)/$#', $path, $m)) return page_station($site, $m[1]);
+    }
+    if (!empty($site['dpe'])) {
+        if ($path === '/dpe/') return page_dpe_france($site);
+        if (preg_match('#^/dpe/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m) && ($dept = dept_by_slug($m[1])))
+            return empty($m[2]) ? page_dpe_dept($site, $dept) : page_dpe_city($site, $dept, $m[2]);
     }
     if ($pm = places_mod($site)) {
         if ($path === '/' . $pm['prefix'] . '/') return page_places_home($site);

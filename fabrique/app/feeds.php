@@ -24,6 +24,7 @@ function out_sitemap_index(array $site): void
     for ($i = 1; $i <= max(1, (int)ceil($n / 1000)); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-posts-$i.xml</loc></sitemap>";
     if (!empty($site['fuel'])) for ($i = 1; $i <= fuel_sitemap_count($site); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-carburant-$i.xml</loc></sitemap>";
     if (function_exists('places_mod') && places_mod($site)) echo '<sitemap><loc>https://' . $site['host'] . '/sitemap-lieux.xml</loc></sitemap>';
+    if (!empty($site['dpe'])) echo '<sitemap><loc>https://' . $site['host'] . '/sitemap-dpe.xml</loc></sitemap>';
     if (!empty($site['ev'])) for ($i = 1; $i <= ev_sitemap_count($site); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-bornes-$i.xml</loc></sitemap>";
     if (!empty($site['jobs'])) for ($i = 1; $i <= jobs_sitemap_count($site); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-jobs-$i.xml</loc></sitemap>";
     echo '</sitemapindex>';
