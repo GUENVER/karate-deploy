@@ -84,7 +84,7 @@ if (PHP_SAPI === 'cli' && !defined('GOOGLE_TOOLS_LIB')) {
                 // envoie les revenus (7 j et 30 j) à chaque fabrique connue du générateur
                 $rep = ['d7' => adsense_report(7), 'd30' => adsense_report(30), 'at' => date('Y-m-d H:i')];
                 $done = [];
-                foreach (glob('/home3/guenver/fabrique-gen/gen-config*.php') as $f) {
+                foreach (glob('/home3/guenver/fabrique-gen/gen-config*.php') as $f) { if (str_contains($f, 'sample')) continue;
                     $G = include $f;
                     $ch = curl_init(rtrim($G['api_base'], '/') . '/_api/adsense');
                     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_TIMEOUT => 30, CURLOPT_POSTFIELDS => json_encode($rep),
