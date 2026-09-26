@@ -3,7 +3,7 @@
 // Signaux : Google Trends FR, requêtes Search Console de la flotte, jeux data.gouv.fr populaires
 // → l'IA propose des niches → chaque niche est notée : demande (Google Suggest), concurrence (Bing, SerpApi si configuré),
 // données publiques automatisables (data.gouv), revenu estimé → top 5 envoyé à l'admin de la fabrique (bouton « Créer ce site »).
-// Le rapport est aussi envoyé par e-mail (Gmail du hub, repli mail()).
+// Le rapport HTML est publié pour l'e-mail mensuel (routine Claude, Gmail personnel).
 // Usage : php niche_research.php [--candidats=20] [--dry] [--mail-last]
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') exit;
@@ -15,7 +15,6 @@ define('GOOGLE_TOOLS_LIB', true);
 require __DIR__ . '/google_tools.php';
 $G = require __DIR__ . '/gen-config.php';
 $opt = getopt('', ['candidats::', 'dry', 'mail-last']);
-const NR_MAIL_TO = 'e.guenver@gmail.com';
 const NR_ADMIN = 'https://fabrique.caen.pro/_admin/niches';
 const NR_LAST = __DIR__ . '/niche_last.json';
 $nCand = (int)($opt['candidats'] ?? 20);
@@ -43,7 +42,7 @@ function nr_fab(array $G, string $route, ?array $body = null): array
     return is_array($j) ? $j : [];
 }
 
-function nr_mail(array $report, array $CFG): string
+function nr_mail(array $report): string
 {
     $e = fn($x) => htmlspecialchars((string)$x, ENT_QUOTES);
     $html = '<div style="font-family:Arial,sans-serif;max-width:680px"><h2>Idées de sites de niche — ' . $e($report['at']) . '</h2>'
@@ -57,14 +56,17 @@ function nr_mail(array $report, array $CFG): string
     }
     if (!empty($report['autres'])) $html .= '<p><b>Autres pistes :</b> ' . implode(', ', array_map(fn($c) => $e($c['name']) . ' (' . (int)$c['score'] . ')', $report['autres'])) . '</p>';
     $html .= '<p><a href="' . NR_ADMIN . '" style="background:#0b6e4f;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Créer un de ces sites en un clic</a></p></div>';
-    $subject = 'Fabrique : ' . count($report['top']) . ' idées de sites de niche (' . date('m/Y') . ')';
-    try {
-        if (function_exists('tool_gmail_send')) { $r = tool_gmail_send(['to' => [NR_MAIL_TO], 'subject' => $subject, 'body' => $html, 'html' => true, 'confirm' => true], $CFG); if (!empty($r['sent'])) return 'gmail ok'; }
-    } catch (Throwable $ex) { nr_say('gmail : ' . $ex->getMessage()); }
-    return mail(NR_MAIL_TO, '=?UTF-8?B?' . base64_encode($subject) . '?=', $html, "MIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8") ? 'mail() ok' : 'échec envoi';
+    // Pas d'envoi depuis le serveur : le rapport HTML est publié à une adresse privée (gen-config 'niche_public'),
+    // puis envoyé depuis la boîte Gmail personnelle par une routine Claude mensuelle.
+    global $G;
+    if (empty($G['niche_public'])) return 'niche_public non configuré';
+    @mkdir(dirname($G['niche_public']), 0755, true);
+    file_put_contents($G['niche_public'], $html);
+    file_put_contents(preg_replace('/\.html$/', '.json', $G['niche_public']), json_encode(['subject' => 'Fabrique : ' . count($report['top']) . ' idées de sites de niche (' . date('m/Y') . ')', 'at' => $report['at']], JSON_UNESCAPED_UNICODE));
+    return 'rapport publié';
 }
 
-if (isset($opt['mail-last'])) { $r = json_decode((string)@file_get_contents(NR_LAST), true); if (!$r) exit("aucun rapport\n"); nr_say(nr_mail($r, $CFG)); exit; }
+if (isset($opt['mail-last'])) { $r = json_decode((string)@file_get_contents(NR_LAST), true); if (!$r) exit("aucun rapport\n"); nr_say(nr_mail($r)); exit; }
 
 // ---------- 1. Signaux ----------
 $existing = [];
@@ -177,4 +179,4 @@ if (isset($opt['dry'])) { echo json_encode($report, JSON_UNESCAPED_UNICODE | JSO
 file_put_contents(NR_LAST, json_encode($report, JSON_UNESCAPED_UNICODE));
 $r = nr_fab($G, 'niches', $report);
 nr_say('envoyé à la fabrique : ' . json_encode($r));
-nr_say('e-mail : ' . nr_mail($report, $CFG));
+nr_say('e-mail : ' . nr_mail($report));
