@@ -51,7 +51,7 @@ function nr_mail(array $report, array $CFG): string
     foreach ($report['top'] as $i => $c) {
         $m = $c['mesures'] ?? [];
         $html .= '<div style="border:1px solid #ddd;border-radius:10px;padding:12px 16px;margin:10px 0"><h3 style="margin:0">' . ($i + 1) . '. ' . $e($c['name']) . ' — score ' . (int)$c['score'] . '/100</h3>'
-            . '<p style="margin:6px 0;color:#555">' . $e($c['sub']) . '.decouverte.org · ' . $e($c['tagline'] ?? '') . '</p><p style="margin:6px 0">' . $e($c['pourquoi'] ?? '') . '</p>'
+            . '<p style="margin:6px 0;color:#555">' . $e(preg_replace('/\..*$/', '', (string)$c['sub'])) . '.decouverte.org · ' . $e($c['tagline'] ?? '') . '</p><p style="margin:6px 0">' . $e($c['pourquoi'] ?? '') . '</p>'
             . '<p style="margin:6px 0;font-size:13px;color:#555">Demande : ' . (int)($m['suggestions'] ?? 0) . ' suggestions Google · concurrence : ' . (int)($m['sites_autorite'] ?? 0) . ' gros sites sur ' . (int)($m['resultats_analyses'] ?? 0) . ' · RPM estimé : ' . $e($m['rpm'] ?? '') . ' €'
             . (!empty($c['donnees']) ? ' · données publiques : ' . $e($c['donnees']) : '') . '</p></div>';
     }
@@ -145,7 +145,8 @@ function nr_serp(string $q): array
 $scored = [];
 foreach ($cands as $c) {
     $seeds = array_slice(array_values(array_filter((array)($c['seeds'] ?? []))), 0, 4);
-    if (!$seeds || empty($c['sub'])) continue;
+    $c['sub'] = preg_replace('/[^a-z0-9\-]/', '', strtolower((string)preg_replace('/\..*$/', '', (string)($c['sub'] ?? ''))));
+    if (!$seeds || $c['sub'] === '') continue;
     $demand = 0;
     foreach ($seeds as $s) foreach (['', 'comment ', 'meilleur ', 'prix '] as $mod) { $demand += nr_suggest($mod . $s); usleep(250000); }
     $auth = 0; $weak = 0; $n = 0;
