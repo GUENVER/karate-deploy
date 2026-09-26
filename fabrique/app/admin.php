@@ -209,8 +209,8 @@ function admin_site_delete(array $s): void
 function admin_settings(): void
 {
     $keys = ['adsense_pub' => 'Éditeur AdSense (ca-pub-…)', 'adsense_slot_in_article' => 'ID de bloc AdSense « in-article » (optionnel, sinon annonces automatiques seules)',
-        'amazon_tag' => 'Identifiant partenaire Amazon (ex. monsite-21)', 'ga4_id' => 'Google Analytics 4 (G-…, optionnel)', 'contact_email' => 'E-mail de contact affiché',
-        'editor_name' => 'Nom de l\'éditeur (mentions légales)', 'ads_txt_extra' => 'Lignes ads.txt supplémentaires (autres régies)',
+        'amazon_tag' => 'Identifiant partenaire Amazon (ex. monsite-21)', 'ga4_id' => 'Google Analytics 4 (G-…, optionnel)', 'contact_email' => 'E-mail de contact affiché ({domaine} = domaine du site, ex. contact@{domaine})',
+        'editor_name' => 'Nom de l\'éditeur (mentions légales ; vide = éditeur anonyme)', 'ads_txt_extra' => 'Lignes ads.txt supplémentaires (autres régies)',
         'ft_client_id' => 'Offres d\'emploi — France Travail : identifiant client (francetravail.io)', 'ft_client_secret' => 'Offres d\'emploi — France Travail : clé secrète',
         'adzuna_app_id' => 'Offres d\'emploi — Adzuna : app_id (developer.adzuna.com)', 'adzuna_app_key' => 'Offres d\'emploi — Adzuna : app_key'];
     $msg = '';

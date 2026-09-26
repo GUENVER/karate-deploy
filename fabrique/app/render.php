@@ -311,11 +311,14 @@ function date_fr(string $d): string
 
 function page_static(array $site, string $key): string
 {
-    $email = setting('contact_email', 'contact@guenver.com');
+    // adresse de contact propre au domaine du site ({domaine} = domaine racine, ex. contact@decouverte.org)
+    $root = implode('.', array_slice(explode('.', $site['host']), -2));
+    $email = str_replace('{domaine}', $root, setting('contact_email', 'contact@{domaine}'));
+    $editor = trim((string)setting('editor_name', ''));
     $pages = [
         'a-propos' => ['À propos', '<p>' . h($site['name']) . ' est un site d\'information consacré à : ' . h($site['niche']) . '.</p><p>Notre objectif : proposer des guides clairs, pratiques et régulièrement mis à jour. Les contenus sont préparés par notre rédaction avec l\'aide d\'outils d\'intelligence artificielle, puis contrôlés automatiquement (structure, doublons, sources).</p><p>Une erreur, une suggestion ? <a href="/contact/">Contactez-nous</a>.</p>'],
         'contact' => ['Contact', '<p>Pour toute question, correction ou proposition de partenariat : <a href="mailto:' . h($email) . '">' . h($email) . '</a>.</p>'],
-        'mentions-legales' => ['Mentions légales', '<p><strong>Éditeur :</strong> ' . h(setting('editor_name', 'Emmanuel Guenver')) . ' — contact : ' . h($email) . '.</p><p><strong>Hébergement :</strong> o2switch, Chemin des Pardiaux, 63000 Clermont-Ferrand, France.</p><p>Les informations publiées sont fournies à titre indicatif et ne remplacent pas l\'avis d\'un professionnel.</p>' . ($site['amazon'] ? '<p>Ce site participe au Programme Partenaires d\'Amazon EU, un programme d\'affiliation conçu pour permettre à des sites de percevoir une rémunération grâce à la création de liens vers Amazon.fr.</p>' : '')],
+        'mentions-legales' => ['Mentions légales', '<p><strong>Éditeur :</strong> ' . ($editor !== '' ? h($editor) : 'l\'équipe de ' . h($site['name']) . ', éditeur non professionnel. Conformément à l\'article 6-III-2 de la loi n° 2004-575 du 21 juin 2004 (LCEN), ses éléments d\'identification ont été communiqués à l\'hébergeur') . '. Contact : ' . h($email) . '.</p><p><strong>Hébergement :</strong> o2switch, Chemin des Pardiaux, 63000 Clermont-Ferrand, France.</p><p>Les informations publiées sont fournies à titre indicatif et ne remplacent pas l\'avis d\'un professionnel.</p>' . ($site['amazon'] ? '<p>Ce site participe au Programme Partenaires d\'Amazon EU, un programme d\'affiliation conçu pour permettre à des sites de percevoir une rémunération grâce à la création de liens vers Amazon.fr.</p>' : '')],
         'confidentialite' => ['Politique de confidentialité', '<p>Ce site ne collecte aucune donnée personnelle directement. Des partenaires tiers, dont Google, utilisent des cookies pour diffuser des annonces en fonction de vos visites sur ce site et d\'autres sites. Vous pouvez désactiver la publicité personnalisée dans les <a href="https://adssettings.google.com" rel="nofollow">paramètres des annonces Google</a>. Pour en savoir plus : <a href="https://policies.google.com/technologies/partner-sites" rel="nofollow">règles de confidentialité des partenaires Google</a>.</p><p>Mesure d\'audience : statistiques anonymes et agrégées.</p>'],
     ];
     if (!isset($pages[$key])) return '';
