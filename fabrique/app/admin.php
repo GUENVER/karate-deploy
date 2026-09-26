@@ -94,6 +94,24 @@ function admin_dashboard(): void
             . '<td><small>' . h((string)$st['last_post']) . '</small></td>'
             . '<td><a href="https://' . h($s['host']) . '/" target="_blank">voir</a> · <a href="/_admin/site/' . h($s['host']) . '/edit">modifier</a></td></tr>';
     }
+    // fabriques distantes (config 'remotes' : [['api_base'=>…, 'token'=>…]]) : sites hébergés sur un autre compte (ex. santé sur le hub)
+    foreach ((array)cfg('remotes', []) as $rm) {
+        $ch = curl_init(rtrim($rm['api_base'], '/') . '/_api/stats');
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8, CURLOPT_HTTPHEADER => ['X-Fabrique-Token: ' . $rm['token']]]);
+        $list = json_decode((string)curl_exec($ch), true);
+        curl_close($ch);
+        $adm = rtrim($rm['api_base'], '/') . '/_admin';
+        if (!is_array($list) || isset($list['error'])) { $rows .= '<tr><td colspan="10"><span class="tag off">fabrique distante injoignable</span> ' . h($rm['api_base']) . '</td></tr>'; continue; }
+        foreach ($list as $st) {
+            foreach ($tot as $k => $v) $tot[$k] += (int)($st[$k] ?? 0);
+            $rows .= '<tr><td><a href="' . h($adm) . '/site/' . h($st['host']) . '" target="_blank"><b>' . h($st['host']) . '</b></a><br><small>fabrique du hub ↗</small></td>'
+                . '<td>' . ($st['status'] === 'active' ? '<span class="tag">en ligne</span>' : '<span class="tag off">' . h($st['status']) . '</span>') . ' ' . ($st['gen'] ? '<span class="tag">IA ' . (float)$st['per_day'] . '/j</span>' : '<span class="tag off">IA off</span>') . '</td>'
+                . '<td>' . (int)$st['posts'] . ' <small>(+' . (int)$st['posts_7d'] . ' /7j)</small></td><td>' . (int)$st['queued'] . '</td><td>' . (int)$st['pv_7d'] . '</td><td>' . (int)$st['pv_30d'] . '</td>'
+                . '<td>' . number_format($earn($ads['d7'] ?? [], $st['host']), 2, ',', ' ') . ' €</td><td>' . number_format($earn($ads['d30'] ?? [], $st['host']), 2, ',', ' ') . ' €</td>'
+                . '<td><small>' . h((string)$st['last_post']) . '</small></td>'
+                . '<td><a href="https://' . h($st['host']) . '/" target="_blank">voir</a> · <a href="' . h($adm) . '/site/' . h($st['host']) . '/edit" target="_blank">modifier</a></td></tr>';
+        }
+    }
     $kpi = '<div class="kpi"><div><b>' . $tot['posts'] . '</b>articles</div><div><b>' . $tot['posts_7d'] . '</b>publiés /7j</div><div><b>' . $tot['queued'] . '</b>sujets en file</div><div><b>' . $tot['pv_7d'] . '</b>pages vues /7j</div><div><b>' . $tot['pv_30d'] . '</b>pages vues /30j</div>'
         . '<div><b>' . number_format((float)($ads['d7']['total'] ?? 0), 2, ',', ' ') . ' €</b>AdSense /7j (compte)</div><div><b>' . number_format((float)($ads['d30']['total'] ?? 0), 2, ',', ' ') . ' €</b>AdSense /30j (compte)</div></div>'
         . (isset($ads['at']) ? '<p><small>Revenus AdSense estimés, mis à jour le ' . h($ads['at']) . ' (tous domaines du compte, y compris hors fabrique).</small></p>' : '<p><small>Revenus AdSense : en attente de la première synchronisation du hub.</small></p>');
