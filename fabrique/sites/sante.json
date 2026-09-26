@@ -1,0 +1,16 @@
+[
+  {
+    "host": "sante-integrative.net", "alias": ["www.sante-integrative.net"], "ymyl": 1,
+    "name": "Santé Intégrative", "tagline": "Bien-être naturel et prévention au quotidien", "color": "#2a7f62", "per_day": 2, "min_words": 1300,
+    "niche": "Bien-être et prévention au quotidien en France : sommeil, gestion du stress, respiration, cohérence cardiaque, activité physique douce (qi gong, tai chi, yoga, marche), alimentation équilibrée, hygiène de vie moderne (écrans, sédentarité). Informations générales fondées sur les sources officielles (HAS, Santé publique France, ameli, OMS) : aucune promesse de guérison, aucun dosage, aucun conseil qui remplace un médecin ; renvoi systématique vers un professionnel de santé.",
+    "seeds": ["mieux dormir", "gérer le stress", "cohérence cardiaque", "respiration relaxation", "qi gong bienfaits", "fatigue chronique hygiène de vie", "marche santé", "alimentation équilibrée", "écrans sommeil", "méditation débutant"],
+    "categories": ["Sommeil", "Stress et émotions", "Respiration et relaxation", "Activité physique douce", "Alimentation", "Hygiène de vie"]
+  },
+  {
+    "host": "medecine-integrative.net", "alias": ["www.medecine-integrative.net"], "ymyl": 1,
+    "name": "Médecine Intégrative", "tagline": "Ce que dit la science des approches complémentaires", "color": "#1f4e79", "per_day": 2, "min_words": 1400,
+    "niche": "Médecine intégrative expliquée au grand public en France : ce que disent les études et les autorités de santé (HAS, Inserm, OMS, rapports de l'Académie de médecine) sur les approches complémentaires utilisées en complément de la médecine conventionnelle — acupuncture, hypnose médicale, méditation de pleine conscience, ostéopathie, sophrologie, qi gong et tai chi, activité physique adaptée, art-thérapie, médecine traditionnelle chinoise. Ton factuel et nuancé, niveau de preuve indiqué, limites et risques signalés, dérives sectaires (Miviludes) évoquées quand pertinent ; jamais d'incitation à arrêter un traitement.",
+    "seeds": ["acupuncture efficacité", "hypnose médicale", "médecine intégrative c'est quoi", "méditation pleine conscience études", "ostéopathie", "sophrologie", "médecine chinoise", "activité physique adaptée", "tai chi recherche", "thérapies complémentaires cancer"],
+    "categories": ["Comprendre la médecine intégrative", "Acupuncture et médecine chinoise", "Hypnose et méditation", "Thérapies manuelles", "Activité physique adaptée", "Ce que dit la recherche"]
+  }
+]
