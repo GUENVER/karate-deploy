@@ -170,7 +170,12 @@ function page_places_dept(array $site, string $dept): string
         . '<p class="lead">' . count($rows) . ' ' . h(count($rows) > 1 ? $m['many'] : $m['one']) . ' dans ' . count($byCity) . ' commune(s) du département ' . h($name) . '.</p>'
         . (count($rows) > 6 ? '<h2>Incontournables</h2>' . place_cards($m, array_slice($top, 0, 6)) : '')
         . '<h2>Toutes les adresses par commune</h2>';
-    foreach ($byCity as $city => $ps) $body .= '<h3>' . h($city) . '</h3><ul>' . implode('', array_map(fn($p) => '<li><a href="' . h(place_url($m, $p)) . '">' . h($p['name']) . '</a> <small>— ' . h($p['kind']) . '</small></li>', $ps)) . '</ul>';
+    $cap = count($rows) > 800 ? 12 : 1000; // gros départements : page allégée (les fiches restent accessibles par le sitemap et « À proximité »)
+    foreach ($byCity as $city => $ps) {
+        usort($ps, fn($a, $b) => $b['rank'] <=> $a['rank']);
+        $body .= '<h3>' . h((string)$city) . '</h3><ul>' . implode('', array_map(fn($p) => '<li><a href="' . h(place_url($m, $p)) . '">' . h($p['name']) . '</a> <small>— ' . h($p['kind']) . '</small></li>', array_slice($ps, 0, $cap)))
+            . (count($ps) > $cap ? '<li><small>et ' . (count($ps) - $cap) . ' autres adresses</small></li>' : '') . '</ul>';
+    }
     $body .= places_guides($site, 4) . places_footer($m);
     $list = ['@context' => 'https://schema.org', '@type' => 'ItemList', 'itemListElement' => array_map(fn($p, $i) => ['@type' => 'ListItem', 'position' => $i + 1, 'url' => 'https://' . $site['host'] . place_url($m, $p), 'name' => $p['name']], array_slice($top, 0, 20), array_keys(array_slice($top, 0, 20)))];
     return layout($site, ['title' => ucfirst($m['many']) . ' ' . $name . ' (' . $dept . ') : ' . count($rows) . ' adresses | ' . $site['name'],
