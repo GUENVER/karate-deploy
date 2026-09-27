@@ -12,6 +12,8 @@ const PLACE_MODULES = [
     'jardins' => ['prefix' => 'jardins-remarquables', 'item' => 'jardin', 'title' => 'Jardins remarquables', 'one' => 'jardin remarquable', 'many' => 'jardins remarquables',
         'nav' => 'Jardins remarquables', 'schema' => 'Park', 'src' => 'Liste des jardins labellisés « Jardin remarquable », ministère de la Culture, Licence Ouverte Etalab',
         'url' => 'https://ministere-culture.s3.sbg.io.cloud.ovh.net/BASE_DES_LIEUX/base_des_lieux_labels_jardins_remarquables.csv'],
+    'fiches' => ['prefix' => 'lieux-a-visiter', 'item' => 'fiches-touristiques', 'title' => 'Lieux à visiter en Normandie', 'one' => 'lieu touristique', 'many' => 'lieux touristiques, restaurants et activités',
+        'nav' => 'Lieux à visiter', 'schema' => 'TouristAttraction', 'src' => 'données touristiques DATAtourisme (offices de tourisme et comités départementaux), Licence Ouverte Etalab'],
     'randos' => ['prefix' => 'randonnees', 'item' => 'randonnee', 'title' => 'Randonnées balisées', 'one' => 'randonnée', 'many' => 'itinéraires de randonnée balisés',
         'nav' => 'Randonnées', 'schema' => 'TouristAttraction', 'src' => 'contributeurs OpenStreetMap (licence ODbL), itinéraires balisés GR, GR de Pays et PR'],
 ];
@@ -46,7 +48,7 @@ function places_store(array $site, array $rows, string $stamp): int
         if (!preg_match('/^\d{5}$/', $cp) || $city === '' || $name === '' || empty($r['id'])) continue;
         $id = (string)$r['id'];
         $data = array_intersect_key($r, array_flip(['fields', 'desc', 'image', 'credit', 'links']));
-        $st->execute([$id, slugify($name . ' ' . $city, 70) . '-' . substr(md5($id), 0, 5), mb_substr($name, 0, 150), mb_substr((string)($r['kind'] ?? ''), 0, 80), mb_substr((string)($r['address'] ?? ''), 0, 160),
+        $st->execute([$id, !empty($r['slug']) ? (string)$r['slug'] : slugify($name . ' ' . $city, 70) . '-' . substr(md5($id), 0, 5), // slug imposé : conserve les anciennes URL mb_substr($name, 0, 150), mb_substr((string)($r['kind'] ?? ''), 0, 80), mb_substr((string)($r['address'] ?? ''), 0, 160),
             $cp, dept_of($cp), $city, slugify($city, 60), (float)($r['lat'] ?? 0), (float)($r['lon'] ?? 0), (int)($r['rank'] ?? 0), json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $stamp]);
         $n++;
     }
