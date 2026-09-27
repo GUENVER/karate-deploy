@@ -76,3 +76,7 @@ for i in range(0, len(items), 1000):
             print(urllib.request.urlopen(req, timeout=120).read().decode()); break
         except urllib.error.HTTPError as e:
             print('erreur', e.code, e.read().decode()[:200]); time.sleep(60)
+
+z.close()
+import os
+os.remove(ZIP)  # ne rien laisser sur le disque du VPS
