@@ -44,6 +44,44 @@ function gt_req(string $method, string $url, ?array $body = null): array
 }
 
 // Revenus AdSense par domaine sur N jours (+ total), en euros.
+// Statistiques Search Console par site de la flotte : séries quotidiennes, totaux 7/28/90 j, requêtes et pages principales.
+function gsc_report(): array
+{
+    $hosts = [];
+    foreach (glob('/home3/guenver/fabrique-gen/gen-config*.php') as $f) { if (str_contains($f, 'sample')) continue;
+        $G = include $f;
+        $ch = curl_init(rtrim($G['api_base'], '/') . '/_api/sites');
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_HTTPHEADER => ['X-Fabrique-Token: ' . $G['api_token']]]);
+        foreach ((array)json_decode((string)curl_exec($ch), true) as $s) if (is_array($s) && ($s['status'] ?? '') !== 'deleted') $hosts[] = $s['host'];
+        curl_close($ch);
+    }
+    $props = array_column(array_filter(gt_req('GET', 'https://www.googleapis.com/webmasters/v3/sites')['siteEntry'] ?? [], fn($e) => $e['permissionLevel'] !== 'siteUnverifiedUser'), 'siteUrl');
+    $end = gmdate('Y-m-d', time() - 2 * 86400); // les données Search Console ont ~2 jours de retard
+    $q = function (string $prop, string $host, array $dims, int $days, int $limit) use ($end) {
+        $r = gt_req('POST', 'https://www.googleapis.com/webmasters/v3/sites/' . rawurlencode($prop) . '/searchAnalytics/query', ['startDate' => gmdate('Y-m-d', strtotime($end) - ($days - 1) * 86400), 'endDate' => $end,
+            'dimensions' => $dims, 'rowLimit' => $limit, 'dimensionFilterGroups' => [['filters' => [['dimension' => 'page', 'operator' => 'contains', 'expression' => '://' . $host . '/']]]]]);
+        return $r['rows'] ?? [];
+    };
+    $sum = function (array $rows) { $c = 0; $i = 0; $p = 0; foreach ($rows as $r) { $c += $r['clicks']; $i += $r['impressions']; $p += $r['position'] * $r['impressions']; } return ['clicks' => (int)$c, 'impr' => (int)$i, 'ctr' => $i ? round(100 * $c / $i, 2) : 0, 'pos' => $i ? round($p / $i, 1) : null]; };
+    $out = ['at' => date('Y-m-d H:i'), 'end' => $end, 'sites' => []];
+    foreach (array_unique($hosts) as $h) {
+        $root = implode('.', array_slice(explode('.', $h), -2));
+        $prop = in_array("sc-domain:$root", $props, true) ? "sc-domain:$root" : (in_array("https://$h/", $props, true) ? "https://$h/" : null);
+        if (!$prop) { $out['sites'][$h] = ['error' => 'propriété Search Console absente']; continue; }
+        try {
+            $daily = $q($prop, $h, ['date'], 90, 100);
+            $series = []; foreach ($daily as $r) $series[$r['keys'][0]] = [(int)$r['clicks'], (int)$r['impressions'], round($r['position'], 1)];
+            $cut = fn($d) => array_filter($daily, fn($r) => $r['keys'][0] > gmdate('Y-m-d', strtotime($end) - $d * 86400));
+            $prev28 = array_filter($daily, fn($r) => $r['keys'][0] > gmdate('Y-m-d', strtotime($end) - 56 * 86400) && $r['keys'][0] <= gmdate('Y-m-d', strtotime($end) - 28 * 86400));
+            $out['sites'][$h] = ['prop' => $prop, 'd7' => $sum($cut(7)), 'd28' => $sum($cut(28)), 'prev28' => $sum($prev28), 'd90' => $sum($daily), 'series' => $series,
+                'queries' => array_map(fn($r) => [$r['keys'][0], (int)$r['clicks'], (int)$r['impressions'], round($r['position'], 1)], $q($prop, $h, ['query'], 28, 40)),
+                'pages' => array_map(fn($r) => [(string)parse_url($r['keys'][0], PHP_URL_PATH), (int)$r['clicks'], (int)$r['impressions'], round($r['position'], 1)], $q($prop, $h, ['page'], 28, 25)),
+                'devices' => array_map(fn($r) => [$r['keys'][0], (int)$r['clicks'], (int)$r['impressions']], $q($prop, $h, ['device'], 28, 5))];
+        } catch (Throwable $e) { $out['sites'][$h] = ['error' => substr($e->getMessage(), 0, 150)]; }
+    }
+    return $out;
+}
+
 function adsense_report(int $days = 30): array
 {
     $acc = gt_req('GET', 'https://adsense.googleapis.com/v2/accounts')['accounts'][0]['name'] ?? null;
@@ -117,6 +155,21 @@ if (PHP_SAPI === 'cli' && !defined('GOOGLE_TOOLS_LIB')) {
                     curl_close($ch);
                 }
                 return ['total_30j' => $rep['d30']['total'], 'fabriques' => $done];
+            })(),
+            'gsc-push' => (function () {
+                // statistiques Search Console de toute la flotte → admin de la fabrique principale (onglet Statistiques)
+                $rep = gsc_report();
+                $done = [];
+                foreach (glob('/home3/guenver/fabrique-gen/gen-config*.php') as $f) { if (str_contains($f, 'sample')) continue;
+                    $G = include $f;
+                    $ch = curl_init(rtrim($G['api_base'], '/') . '/_api/gsc');
+                    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_TIMEOUT => 60, CURLOPT_POSTFIELDS => json_encode($rep, JSON_UNESCAPED_UNICODE),
+                        CURLOPT_HTTPHEADER => ['X-Fabrique-Token: ' . $G['api_token'], 'Content-Type: application/json']]);
+                    curl_exec($ch);
+                    $done[$G['api_base']] = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+                    curl_close($ch);
+                }
+                return ['sites' => count($rep['sites']), 'fabriques' => $done];
             })(),
             default => ['usage' => 'adsense [jours] | gsc-list | verify-token <domaine> | verify <domaine> | sitemap <propriété> <url>'],
         };

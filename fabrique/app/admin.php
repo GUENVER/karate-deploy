@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/api.php';
+require_once __DIR__ . '/stats.php';
 
 function admin_main(string $path): void
 {
@@ -23,6 +24,8 @@ function admin_main(string $path): void
         case $route === 'settings': admin_settings(); return;
         case $route === 'log': admin_log(); return;
         case $route === 'niches': admin_niches(); return;
+        case $route === 'stats': admin_stats(); return;
+        case (bool)preg_match('#^stats/([a-z0-9.\-]+)$#', $route, $m): admin_stats_site($m[1]); return;
         case (bool)preg_match('#^site/([a-z0-9.\-]+)(?:/(edit|delete|topics|toggle|run))?$#', $route, $m):
             $s = site_by_host($m[1]);
             if (!$s) { admin_page('Introuvable', '<p>Site inconnu.</p>'); return; }
@@ -74,7 +77,7 @@ table{border-collapse:collapse;width:100%;background:#fff;font-size:.9rem}th,td{
 textarea{min-height:90px}button,.btn{background:#0b6e4f;color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer;font:inherit;text-decoration:none;display:inline-block}.btn.g{background:#6c757d}.btn.r,button.r{background:#b32d2e}
 .err{color:#b32d2e;font-weight:600}.ok{color:#0b6e4f;font-weight:600}.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.78rem;background:#e7f3ee;color:#0b6e4f}.tag.off{background:#fbeaea;color:#b32d2e}
 .kpi{display:flex;gap:14px;flex-wrap:wrap}.kpi div{background:#fff;border:1px solid #e3e5e8;border-radius:10px;padding:12px 18px}.kpi b{display:block;font-size:1.5rem}.inline{display:inline}.inline button{padding:4px 10px;font-size:.85rem}
-</style></head><body>' . ($nav ? '<div class="top"><b>🏭 Fabrique à sites</b><a href="/_admin/">Sites</a><a href="/_admin/new">+ Ajouter un site</a><a href="/_admin/niches">Idées de niches</a><a href="/_admin/log">Journal</a><a href="/_admin/settings">Réglages</a><a href="/_admin/logout">Quitter</a></div>' : '')
+</style></head><body>' . ($nav ? '<div class="top"><b>🏭 Fabrique à sites</b><a href="/_admin/">Sites</a><a href="/_admin/stats">📊 Statistiques</a><a href="/_admin/new">+ Ajouter un site</a><a href="/_admin/niches">Idées de niches</a><a href="/_admin/log">Journal</a><a href="/_admin/settings">Réglages</a><a href="/_admin/logout">Quitter</a></div>' : '')
         . '<div class="w"><h1>' . h($title) . '</h1>' . $body . '</div></body></html>';
 }
 

@@ -22,6 +22,7 @@ function api_main(string $route): void
             case 'fail': api_out(api_fail($in)); return;
             case 'stats': api_out(api_stats()); return;
             case 'niches': setting_set('niche_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true, 'top' => count($in['top'] ?? [])]); return;
+            case 'gsc': setting_set('gsc_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true, 'sites' => count($in['sites'] ?? [])]); return;
             case 'adsense': setting_set('adsense_report', json_encode($in, JSON_UNESCAPED_UNICODE)); api_out(['ok' => true]); return;
             case 'post': api_out(api_post($in)); return;
             case 'commune_extra': // données par commune calculées ailleurs (ex. qualité de l'eau depuis le VPS)
@@ -231,6 +232,7 @@ function site_stats(array $s): array
         'pv_7d' => (int)$q("SELECT COALESCE(SUM(pv),0) FROM stats WHERE day>=date('now','-7 days')"),
         'pv_30d' => (int)$q("SELECT COALESCE(SUM(pv),0) FROM stats WHERE day>=date('now','-30 days')"),
         'last_post' => $s['last_post_at'], 'next_gen' => $s['next_gen_at'],
+        'pv_series' => $db->query("SELECT day, pv FROM stats WHERE day>=date('now','-90 days') ORDER BY day")->fetchAll(PDO::FETCH_KEY_PAIR),
     ];
 }
 
