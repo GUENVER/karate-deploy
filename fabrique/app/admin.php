@@ -242,7 +242,8 @@ function admin_settings(): void
         'amazon_tag' => 'Identifiant partenaire Amazon (ex. monsite-21)', 'ga4_id' => 'Google Analytics 4 (G-…, optionnel)', 'contact_email' => 'E-mail de contact affiché ({domaine} = domaine du site, ex. contact@{domaine})',
         'editor_name' => 'Nom de l\'éditeur (mentions légales ; vide = éditeur anonyme)', 'ads_txt_extra' => 'Lignes ads.txt supplémentaires (autres régies)',
         'ft_client_id' => 'Offres d\'emploi — France Travail : identifiant client (francetravail.io)', 'ft_client_secret' => 'Offres d\'emploi — France Travail : clé secrète',
-        'adzuna_app_id' => 'Offres d\'emploi — Adzuna : app_id (developer.adzuna.com)', 'adzuna_app_key' => 'Offres d\'emploi — Adzuna : app_key'];
+        'adzuna_app_id' => 'Offres d\'emploi — Adzuna : app_id (developer.adzuna.com)', 'adzuna_app_key' => 'Offres d\'emploi — Adzuna : app_key',
+        'lba_token' => 'Offres d\'emploi — La bonne alternance : jeton API (api.apprentissage.beta.gouv.fr, valable 1 an)', 'careerjet_key' => 'Offres d\'emploi — Careerjet : clé API (compte Publisher)'];
     $msg = '';
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($keys as $k => $_) setting_set($k, trim((string)($_POST[$k] ?? '')));
