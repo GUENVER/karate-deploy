@@ -338,7 +338,7 @@ function page_jobs_home(array $site): string
         . '<h2>Offres d\'emploi par région</h2><div class="grid">' . $regs . '</div>'
         . ($topCities ? '<h2>Villes qui recrutent le plus</h2><p>' . city_links($topCities) . '.</p>' : '')
         . '<h2>Dernières offres publiées</h2><div class="grid">' . implode('', array_map('job_card', $latest)) . '</div>' . jobs_disclaimer();
-    return layout($site, ['title' => 'Offres d\'emploi par région | ' . $site['name'], 'desc' => "$total offres d'emploi en France par région : CDI, CDD, intérim, alternance. Mises à jour quotidiennes.", 'canonical' => 'https://' . $site['host'] . '/offres-emploi/'], $body);
+    return layout($site, ['title' => 'Offres d\'emploi en France : ' . number_format($total, 0, ',', ' ') . ' offres à jour aujourd\'hui | ' . $site['name'], 'desc' => "$total offres d'emploi en France par région : CDI, CDD, intérim, alternance. Mises à jour quotidiennes.", 'canonical' => 'https://' . $site['host'] . '/offres-emploi/'], $body);
 }
 
 function page_jobs_region(array $site, array $reg, int $page, string $contract): string
@@ -373,7 +373,8 @@ function page_jobs_region(array $site, array $reg, int $page, string $contract):
         . careerjet_slot($site, $contract ? JOB_CONTRACTS[$contract] : '', $reg['name'])
         . jobs_disclaimer();
     return layout($site, [
-        'title' => $title . ($page > 1 ? " — page $page" : '') . ' | ' . $site['name'], 'desc' => "$total offres d'emploi en {$reg['name']} : CDI, CDD, intérim, alternance. Postulez directement auprès des recruteurs.",
+        'title' => ($page > 1 || $contract ? $title . ($page > 1 ? " — page $page" : '') : 'Emploi ' . $reg['name'] . ' : ' . number_format($total, 0, ',', ' ') . ' offres, mises à jour aujourd\'hui') . ' | ' . $site['name'],
+        'desc' => number_format($total, 0, ',', ' ') . " offres d'emploi en {$reg['name']} mises à jour aujourd'hui : CDI, CDD, intérim, alternance, emploi public. Postulez directement auprès des recruteurs.",
         'canonical' => 'https://' . $site['host'] . $base . ($page > 1 ? "page/$page/" : ''), 'robots' => $contract ? 'noindex,follow' : null,
         'schema' => [breadcrumbs($site, [['Offres d\'emploi', '/offres-emploi/'], [$reg['name'], $base]])],
     ], $body);
@@ -460,7 +461,7 @@ function page_jobs_city(array $site, string $slug): string
     $schema = [breadcrumbs($site, [['Offres d\'emploi', '/offres-emploi/'], [$reg[1], '/offres-emploi/' . $reg[0] . '/'], ['Emploi ' . $name, $base]]),
         ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => array_map(fn($f) => ['@type' => 'Question', 'name' => $f[0], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f[1]]], $faq)]];
     $desc = $nf($total) . " offres d'emploi à $name : " . $pct($contracts['cdi'] ?? 0) . ' % en CDI' . ($med !== null ? ', salaire médian annoncé ' . $nf($med) . ' € brut/mois' : '') . ($sectors ? '. Secteurs qui recrutent : ' . implode(', ', array_slice(array_keys($sectors), 0, 3)) : '') . '.';
-    return layout($site, ['title' => 'Emploi à ' . $name . ' : ' . $nf($total) . ' offres d\'emploi | ' . $site['name'], 'desc' => mb_strimwidth($desc, 0, 158, '…'),
+    return layout($site, ['title' => 'Emploi ' . $name . ' : ' . $nf($total) . ' offres, mises à jour aujourd\'hui | ' . $site['name'], 'desc' => mb_strimwidth($desc, 0, 158, '…'),
         'canonical' => 'https://' . $site['host'] . $base, 'schema' => $schema], $body);
 }
 
@@ -540,7 +541,7 @@ function page_job(array $site, string $slug): ?string
         . ($closed ? '' : '<p><a class="btn" style="background:var(--c);color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:700" href="' . h($j['url']) . '" rel="' . $rel . '" target="_blank">Postuler sur le site de l\'offre</a></p>')
         . ($desc !== '' ? '<h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div>' : '')
         . '<p class="disc">Source : ' . h($j['src']) . ($j['src'] === 'Adzuna' ? ' — Jobs by Adzuna' : '') . '. Publiée le ' . h(date_fr($j['created_at'])) . '.</p>'
-        . ($closed ? '' : job_ad($site) . (function_exists('metier_links_for_job') ? metier_links_for_job($site, $j) : '') . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
+        . ($closed ? '' : job_ad($site) . (function_exists('metier_links_for_job') ? metier_links_for_job($site, $j) . metier_similar_for_job($site, $j) : '') . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
         . '</article><aside><div class="box"><h4>Préparer sa candidature</h4><ul>'
         . implode('', array_map(fn($g) => '<li><a href="' . h($g['path']) . '">' . h($g['title']) . '</a></li>', site_db($site['host'])->query("SELECT path,title FROM posts WHERE status='publish' ORDER BY published_at DESC LIMIT 8")->fetchAll()))
         . '</ul></div></aside></div>';
