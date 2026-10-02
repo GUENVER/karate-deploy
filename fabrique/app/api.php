@@ -34,6 +34,14 @@ function api_main(string $route): void
                 api_out(['ok' => true, 'stored' => $n, 'purged' => !empty($in['final']) ? places_finish($s, (string)$in['stamp']) : 0]); return;
             case 'enrich': api_out(api_enrich($in)); return;
             case 'sites': api_out(registry()->query("SELECT host,name,niche,status,gen,per_day FROM sites WHERE status<>'deleted'")->fetchAll()); return;
+            case 'metier_text': // textes rédigés des pages métier (générés sur le hub)
+                $s = need_site($in + $_GET); $db = jobs_db($s['host']); metier_tables($db);
+                $db->exec('CREATE TABLE IF NOT EXISTS job_metier_text(slug TEXT PRIMARY KEY, html TEXT, updated TEXT)');
+                if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($in['slug'])) {
+                    $db->prepare('INSERT OR REPLACE INTO job_metier_text(slug,html,updated) VALUES(?,?,?)')->execute([(string)$in['slug'], (string)$in['html'], now()]);
+                    cache_clear($s['host']); api_out(['ok' => true]); return;
+                }
+                api_out($db->query('SELECT m.slug, m.name, m.n, s.med FROM job_metiers m LEFT JOIN job_metier_sal s ON s.slug=m.slug WHERE m.slug NOT IN (SELECT slug FROM job_metier_text) ORDER BY m.n DESC LIMIT ' . max(1, min(50, (int)($_GET['limit'] ?? 10))))->fetchAll()); return;
             default: api_out(['error' => 'route'], 404);
         }
     } catch (Throwable $e) {
