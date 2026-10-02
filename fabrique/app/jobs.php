@@ -300,7 +300,7 @@ function job_card(array $j): string
 
 function jobs_disclaimer(): string
 {
-    return '<p class="disc">Offres issues de sources publiques et partenaires (France Travail, Adzuna). La candidature se fait sur le site d\'origine de l\'offre.</p>';
+    return '<p class="disc">Offres issues de sources publiques et partenaires (France Travail, Choisir le service public, La bonne alternance, Adzuna) — <a href="/nos-sources/">nos sources</a>. Mise à jour : ' . date_fr(now()) . ' à ' . (new DateTime('now', new DateTimeZone('Europe/Paris')))->format('H') . ' h. La candidature se fait sur le site d\'origine de l\'offre.</p>';
 }
 
 // Bloc AdSense « display » responsive (ID dans le réglage adsense_slot_display) ; rien si non configuré.
