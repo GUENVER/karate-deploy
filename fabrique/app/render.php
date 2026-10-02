@@ -40,7 +40,7 @@ blockquote{border-left:4px solid var(--c);margin:1em 0;padding:.3em 1em;backgrou
 .kpi{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}.kpi div{flex:1 1 130px;background:var(--s);border-radius:10px;padding:12px;font-size:.85rem}.kpi b{display:block;font-size:1.4rem;color:var(--c)}
 #evcalc .row{display:flex;flex-wrap:wrap;gap:10px}#evcalc label{flex:1 1 140px;font-size:.85rem}#evcalc input{width:100%;padding:7px;border:1px solid var(--b);border-radius:8px;font-size:1rem}aside h4{margin:0 0 10px}
 aside ul{padding-left:18px;margin:0;font-size:.93rem}aside li{margin:6px 0}.pag{display:flex;gap:10px;justify-content:center;margin:30px 0}.pag a,.pag span{padding:6px 12px;border:1px solid var(--b);border-radius:8px;text-decoration:none}
-.dd{position:relative}.dd summary{cursor:pointer;list-style:none;color:var(--t)}.dd summary::-webkit-details-marker{display:none}.dd summary:after{content:' \25BE';color:var(--m)}
+.dd{position:relative}.dd summary{cursor:pointer;list-style:none;color:var(--t)}.dd summary::-webkit-details-marker{display:none}.dd summary:after{content:' ▾';color:var(--m)}
 .ddp{position:absolute;left:0;top:28px;z-index:50;background:#fff;border:1px solid var(--b);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:14px 18px;width:min(560px,92vw);display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;font-size:.9rem}
 .ddp b{grid-column:1/-1;margin:8px 0 2px;color:var(--c);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}.ddp a{color:var(--t)!important;padding:3px 0}.ddp a:hover{color:var(--c)!important}
 @media(max-width:700px){.ddp{position:static;box-shadow:none;width:100%;margin-top:8px}}
@@ -96,7 +96,19 @@ function jobs_menu(array $site): string
     try { $cities = $db->query('SELECT slug, name FROM job_cities ORDER BY n DESC LIMIT 12')->fetchAll(); } catch (Throwable $e) { $cities = []; }
     if ($cities) { $o .= '<b>Grandes villes</b>'; foreach ($cities as $c) $o .= '<a href="/offres-emploi/ville/' . h($c['slug']) . '/">' . h($c['name']) . '</a>'; }
     return '<details class="dd"><summary><strong>Offres d\'emploi</strong></summary><nav class="ddp" aria-label="Offres d\'emploi par région">' . $o . '</nav></details>'
-        . '<script>document.addEventListener("click",function(e){document.querySelectorAll("details.dd[open]").forEach(function(d){if(!d.contains(e.target))d.removeAttribute("open")})})</script>';
+        . '<script>document.addEventListener("click",function(e){document.querySelectorAll("details.dd[open]").forEach(function(d){if(!d.contains(e.target))d.removeAttribute("open")})});if(matchMedia("(hover:hover)").matches)document.querySelectorAll("details.dd").forEach(function(d){d.addEventListener("mouseenter",function(){d.open=true});d.addEventListener("mouseleave",function(){d.open=false})})</script>';
+}
+
+// Accès direct aux offres par région en tête de l'accueil d'un site d'emploi.
+function jobs_home_regions(array $site): string
+{
+    $counts = [];
+    foreach (jobs_db($site['host'])->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
+    if (!$counts) return '';
+    $l = '';
+    foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $l .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . ' <small>(' . number_format($counts[$code], 0, ',', ' ') . ')</small></a>';
+    return '<section class="box" style="margin:22px 0;padding:16px 20px;border:1px solid var(--b);border-radius:12px"><h2 style="margin:0 0 10px;font-size:1.25rem">Offres d\'emploi par région — ' . number_format(array_sum($counts), 0, ',', ' ') . ' offres</h2>'
+        . '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;font-size:.95rem">' . $l . '</div><p style="margin:10px 0 0"><a href="/offres-emploi/"><strong>Voir toutes les offres →</strong></a></p></section>';
 }
 
 function card(array $p, bool $h2 = true): string
@@ -139,6 +151,7 @@ function page_home(array $site, int $page): string
     [$posts, $pages] = list_posts($site, '', [], $page);
     if ($page > 1 && !$posts) return '';
     $body = $page == 1 ? '<h1 style="margin:28px 0 0;font-size:1.7rem">' . h($site['name']) . ' — ' . h($site['tagline']) . '</h1>' : '<h1 style="margin:28px 0 0;font-size:1.5rem">Articles — page ' . $page . '</h1>';
+    if ($page == 1 && !empty($site['jobs']) && function_exists('jobs_db')) $body .= jobs_home_regions($site);
     if ($page == 1 && !empty($site['fuel']) && function_exists('fuel_home_block')) $body .= fuel_home_block($site) . '<h2>Nos derniers guides</h2>';
     if ($page == 1 && function_exists('places_mod') && places_mod($site) && ($pb = places_home_block($site))) $body .= $pb . '<h2>Nos derniers guides</h2>';
     if ($page == 1 && !empty($site['commune']) && function_exists('commune_home_block') && ($cb = commune_home_block($site))) $body .= $cb . '<h2>Nos derniers guides</h2>';
