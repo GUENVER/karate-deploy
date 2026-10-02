@@ -7,6 +7,7 @@ require dirname(__DIR__) . '/app/render.php';
 require dirname(__DIR__) . '/app/feeds.php';
 require dirname(__DIR__) . '/app/jobs.php';
 require dirname(__DIR__) . '/app/careerjet.php';
+require dirname(__DIR__) . '/app/lba_blocks.php';
 require dirname(__DIR__) . '/app/fuel.php';
 require dirname(__DIR__) . '/app/ev.php';
 require dirname(__DIR__) . '/app/places.php';
