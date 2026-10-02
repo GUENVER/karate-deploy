@@ -6,6 +6,7 @@ require dirname(__DIR__) . '/app/core.php';
 require dirname(__DIR__) . '/app/render.php';
 require dirname(__DIR__) . '/app/feeds.php';
 require dirname(__DIR__) . '/app/jobs.php';
+require dirname(__DIR__) . '/app/careerjet.php';
 require dirname(__DIR__) . '/app/fuel.php';
 require dirname(__DIR__) . '/app/ev.php';
 require dirname(__DIR__) . '/app/places.php';
@@ -48,6 +49,7 @@ if (preg_match('#^/(wp-admin|wp-login\.php|xmlrpc\.php|wp-json)#', $path)) { htt
 if ($site['status'] === 'paused' && !isset($_COOKIE['fab_admin'])) { http_response_code(503); header('Retry-After: 3600'); echo 'Maintenance.'; exit; }
 
 // Compteur de pages vues : balise envoyée par le navigateur (JavaScript), les robots qui imitent un navigateur ne l'exécutent pas.
+if ($path === '/_cj') careerjet_endpoint($site);
 if ($path === '/_pv') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_bot()) {
         try {
