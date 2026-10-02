@@ -14,6 +14,24 @@ $say = fn(string $m) => print(date('c') . " $m\n");
 
 $tok = setting('lba_token', '');
 if ($tok === '') exit("lba_token absent\n");
+
+// Rappel de renouvellement du jeton (valable 1 an) : mail à J-30, J-14, J-7, J-3, J-1, puis chaque jour une fois expiré.
+$exp = (int)(json_decode((string)base64_decode(strtr(explode('.', $tok)[1] ?? '', '-_', '+/')), true)['exp'] ?? 0);
+if ($exp) {
+    $left = (int)floor(($exp - time()) / 86400);
+    if (in_array($left, [30, 14, 7, 3, 1, 0], true) || $left < 0) {
+        $msg = "Le jeton de l'API La bonne alternance utilisé par recruteur.eu " . ($left < 0 ? 'a EXPIRÉ le ' : 'expire le ') . date('d/m/Y', $exp)
+            . ($left >= 0 ? " (dans $left jour(s))" : '') . ".\nSans renouvellement, les offres d'alternance ne sont plus mises à jour et se ferment au bout de 3 jours.\n\n"
+            . "Pour le renouveler :\n1. Aller sur https://api.apprentissage.beta.gouv.fr/fr et se connecter (compte e.guenver@gmail.com).\n"
+            . "2. Ouvrir « Mon compte », rubrique des jetons d'accès API.\n3. Générer un nouveau jeton (nom : recruteur-eu) et le copier.\n"
+            . "4. Le transmettre à Claude (projet SITES ADSENSE & PUB) : il le remplace dans le réglage « lba_token » de la fabrique (WEBNORMANDIE, data/registry.sqlite).\n"
+            . "   Ou le saisir soi-même dans l'admin de la fabrique : Réglages > lba_token.\n5. Vérifier le lendemain dans data/jobs_lba.log que l'import de 4 h 41 s'est bien déroulé.\n";
+        foreach (['e.guenver@gmail.com', 'contact@guenver.com'] as $to)
+            @mail($to, '=?UTF-8?B?' . base64_encode('[recruteur.eu] Jeton La bonne alternance : ' . ($left < 0 ? 'expiré' : "expire dans $left j")) . '?=', $msg,
+                "From: fabrique@recruteur.eu\r\nContent-Type: text/plain; charset=UTF-8\r\n");
+        $say("rappel d'expiration envoyé (J$left)");
+    }
+}
 $ch = curl_init('https://api.apprentissage.beta.gouv.fr/api/job/v1/export');
 curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok]]);
 $j = json_decode((string)curl_exec($ch), true);
