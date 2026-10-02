@@ -163,3 +163,17 @@ function out_sitemap_metiers(array $site): void
     foreach ($db->query('SELECT mslug, cslug FROM job_metier_cities LIMIT 45000') as $r) echo "<url><loc>$b/emploi/{$r['mslug']}/{$r['cslug']}/</loc><lastmod>$d</lastmod></url>";
     echo '</urlset>';
 }
+
+// Liste prioritaire pour l'API d'indexation Google (quota limité) : offres récentes au contenu le plus unique
+// (emploi public, alternance), puis offres avec salaire et description complète. Non référencée dans le sitemap.
+function out_sitemap_priority(array $site): void
+{
+    header('Content-Type: application/xml; charset=utf-8');
+    header('X-Robots-Tag: noindex');
+    $db = jobs_db($site['host']);
+    $rows = $db->query("SELECT slug FROM jobs WHERE status='open' AND created_at >= datetime('now','-10 days')
+        ORDER BY CASE WHEN id LIKE 'csp-%' THEN 0 WHEN id LIKE 'lba-%' THEN 1 WHEN salary<>'' AND length(description)>600 THEN 2 ELSE 3 END, created_at DESC LIMIT 3000")->fetchAll(PDO::FETCH_COLUMN);
+    echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+    foreach ($rows as $s) echo '<url><loc>https://' . $site['host'] . '/offre/' . $s . '/</loc></url>';
+    echo '</urlset>';
+}
