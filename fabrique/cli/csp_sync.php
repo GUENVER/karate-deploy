@@ -19,6 +19,12 @@ if (!$sites) exit;
 $main = jobs_db($sites[0]['host']); csp_tables($main);
 $known = fn(string $ref) => (bool)$main->query('SELECT 1 FROM csp_queue WHERE ref=' . $main->quote($ref))->fetchColumn();
 $enqueue = $main->prepare("INSERT OR IGNORE INTO csp_queue(ref,url,found) VALUES(?,?,?)");
+// 0. Validité en tout début de passage (si le passage est interrompu, les offres restent à jour)
+foreach ($sites as $s0) {
+    $d0 = jobs_db($s0['host']); csp_tables($d0);
+    $d0->exec("UPDATE jobs SET seen_at='" . now() . "' WHERE id IN (SELECT id FROM csp_meta WHERE (deadline<>'' AND deadline>=date('now')) OR (deadline='' AND fetched>=datetime('now','-45 days')))");
+    $d0->exec("UPDATE jobs SET status='closed' WHERE status='open' AND id IN (SELECT id FROM csp_meta WHERE deadline<>'' AND deadline<date('now'))");
+}
 
 // 1. Nouvelles offres : pages récentes jusqu'à une page entièrement connue
 $new = 0;
