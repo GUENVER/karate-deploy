@@ -118,6 +118,7 @@ function route(array $site, string $path): ?string
     }
     if (!empty($site['jobs'])) {
         if ($path === '/offres-emploi/') return page_jobs_home($site);
+        if (preg_match('#^/offres-emploi/ville/([a-z0-9\-]+)/$#', $path, $m)) return page_jobs_city($site, $m[1]);
         if (preg_match('#^/offres-emploi/([a-z\-]+)/(?:page/(\d+)/)?$#', $path, $m) && ($reg = region_by_slug($m[1]))) {
             $c = (string)($_GET['contrat'] ?? '');
             return page_jobs_region($site, $reg, max(1, (int)($m[2] ?? 1)), isset(JOB_CONTRACTS[$c]) ? $c : '');
