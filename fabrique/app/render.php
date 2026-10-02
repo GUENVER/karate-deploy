@@ -101,7 +101,8 @@ function jobs_menu(array $site): string
     $db = jobs_db($site['host']);
     $counts = [];
     foreach ($db->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
-    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a><span></span><b>Par région</b>';
+    $hasCsp = (bool)$db->query("SELECT 1 FROM jobs WHERE status='open' AND id LIKE 'csp-%' LIMIT 1")->fetchColumn();
+    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($hasCsp ? '<a href="/emploi-public/"><strong>Emploi public</strong></a>' : '<span></span>') . '<b>Par région</b>';
     foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $o .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . '</a>';
     try { $cities = $db->query('SELECT slug, name FROM job_cities ORDER BY n DESC LIMIT 12')->fetchAll(); } catch (Throwable $e) { $cities = []; }
     if ($cities) { $o .= '<b>Grandes villes</b>'; foreach ($cities as $c) $o .= '<a href="/offres-emploi/ville/' . h($c['slug']) . '/">' . h($c['name']) . '</a>'; }
