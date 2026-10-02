@@ -333,6 +333,7 @@ function page_jobs_home(array $site): string
         . (function_exists('fr_map') ? '<style>' . fr_map_css() . '</style>' . fr_map($counts, '/offres-emploi/') : '')
         . '<h2>Offres par type de contrat</h2>' . count_chips(array_map(fn($r) => [JOB_CONTRACTS[$r['contract']] ?? ucfirst((string)$r['contract']), $r['n'], ''], $db->query("SELECT contract, COUNT(*) n FROM jobs WHERE status='open' AND contract<>'' GROUP BY contract ORDER BY n DESC")->fetchAll()))
         . '<h2>Offres par secteur d\'activité</h2>' . count_chips(array_map(fn($r) => [$r['sector'], $r['n'], ''], $db->query("SELECT sector, COUNT(*) n FROM jobs WHERE status='open' AND sector<>'' GROUP BY sector ORDER BY n DESC LIMIT 20")->fetchAll()))
+        . (function_exists('intents_chips') ? intents_chips($db) : '')
         . (function_exists('csp_tables') && ($np = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn()) ? '<p><a href="/emploi-public/"><strong>Emploi public : ' . number_format($np, 0, ',', ' ') . ' offres de la fonction publique →</strong></a></p>' : '')
         . '<h2>Offres d\'emploi par région</h2><div class="grid">' . $regs . '</div>'
         . ($topCities ? '<h2>Villes qui recrutent le plus</h2><p>' . city_links($topCities) . '.</p>' : '')
@@ -539,7 +540,7 @@ function page_job(array $site, string $slug): ?string
         . ($closed ? '' : '<p><a class="btn" style="background:var(--c);color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:700" href="' . h($j['url']) . '" rel="' . $rel . '" target="_blank">Postuler sur le site de l\'offre</a></p>')
         . ($desc !== '' ? '<h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div>' : '')
         . '<p class="disc">Source : ' . h($j['src']) . ($j['src'] === 'Adzuna' ? ' — Jobs by Adzuna' : '') . '. Publiée le ' . h(date_fr($j['created_at'])) . '.</p>'
-        . ($closed ? '' : job_ad($site) . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
+        . ($closed ? '' : job_ad($site) . (function_exists('metier_links_for_job') ? metier_links_for_job($site, $j) : '') . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
         . '</article><aside><div class="box"><h4>Préparer sa candidature</h4><ul>'
         . implode('', array_map(fn($g) => '<li><a href="' . h($g['path']) . '">' . h($g['title']) . '</a></li>', site_db($site['host'])->query("SELECT path,title FROM posts WHERE status='publish' ORDER BY published_at DESC LIMIT 8")->fetchAll()))
         . '</ul></div></aside></div>';
@@ -547,7 +548,7 @@ function page_job(array $site, string $slug): ?string
     $schema = [breadcrumbs($site, [['Offres d\'emploi', '/offres-emploi/'], [$reg[1], '/offres-emploi/' . $reg[0] . '/'], [$j['title'], job_url($j)]])];
     if (!$closed) {
         $posting = ['@context' => 'https://schema.org', '@type' => 'JobPosting', 'title' => $j['title'], 'description' => nl2br(h($desc)),
-            'datePosted' => substr($j['created_at'], 0, 10), 'validThrough' => gmdate('Y-m-d\TH:i:s\Z', strtotime($j['created_at'] . ' UTC') + 45 * 86400),
+            'datePosted' => substr($j['created_at'], 0, 10),
             'employmentType' => $types[$j['contract']] ?? 'OTHER', 'hiringOrganization' => ['@type' => 'Organization', 'name' => $j['company'] ?: 'Entreprise non communiquée'],
             'jobLocation' => ['@type' => 'Place', 'address' => ['@type' => 'PostalAddress', 'addressLocality' => $j['city'], 'postalCode' => $j['postal'], 'addressRegion' => $reg[1], 'addressCountry' => 'FR']],
             'identifier' => ['@type' => 'PropertyValue', 'name' => $j['src'], 'value' => $j['id']], 'directApply' => false];
