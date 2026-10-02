@@ -40,6 +40,10 @@ blockquote{border-left:4px solid var(--c);margin:1em 0;padding:.3em 1em;backgrou
 .kpi{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}.kpi div{flex:1 1 130px;background:var(--s);border-radius:10px;padding:12px;font-size:.85rem}.kpi b{display:block;font-size:1.4rem;color:var(--c)}
 #evcalc .row{display:flex;flex-wrap:wrap;gap:10px}#evcalc label{flex:1 1 140px;font-size:.85rem}#evcalc input{width:100%;padding:7px;border:1px solid var(--b);border-radius:8px;font-size:1rem}aside h4{margin:0 0 10px}
 aside ul{padding-left:18px;margin:0;font-size:.93rem}aside li{margin:6px 0}.pag{display:flex;gap:10px;justify-content:center;margin:30px 0}.pag a,.pag span{padding:6px 12px;border:1px solid var(--b);border-radius:8px;text-decoration:none}
+.dd{position:relative}.dd summary{cursor:pointer;list-style:none;color:var(--t)}.dd summary::-webkit-details-marker{display:none}.dd summary:after{content:' \25BE';color:var(--m)}
+.ddp{position:absolute;left:0;top:28px;z-index:50;background:#fff;border:1px solid var(--b);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:14px 18px;width:min(560px,92vw);display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;font-size:.9rem}
+.ddp b{grid-column:1/-1;margin:8px 0 2px;color:var(--c);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}.ddp a{color:var(--t)!important;padding:3px 0}.ddp a:hover{color:var(--c)!important}
+@media(max-width:700px){.ddp{position:static;box-shadow:none;width:100%;margin-top:8px}}
 footer.bot{border-top:1px solid var(--b);margin-top:50px;padding:26px 0;color:var(--m);font-size:.88rem;background:var(--s)}footer.bot a{color:var(--m);margin-right:14px}";
 }
 
@@ -64,7 +68,7 @@ function layout(array $site, array $m, string $body): string
     if (!empty($site['commune'])) $nav .= '<a href="/commune/"><strong>Fiches communes</strong></a>';
     if (!empty($site['dpe'])) $nav .= '<a href="/dpe/"><strong>DPE de votre commune</strong></a>';
     if (!empty($site['ev'])) $nav .= '<a href="/bornes-recharge/"><strong>Bornes de recharge</strong></a>';
-    if (!empty($site['jobs']) && function_exists('jobs_db') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' LIMIT 1")->fetchColumn()) $nav .= '<a href="/offres-emploi/"><strong>Offres d\'emploi</strong></a>';
+    if (!empty($site['jobs']) && function_exists('jobs_db') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' LIMIT 1")->fetchColumn()) $nav .= jobs_menu($site);
     foreach (array_slice(site_categories($site), 0, 7) as $c) $nav .= '<a href="/category/' . h($c['slug']) . '/">' . h($c['name']) . '</a>';
     $parts = explode(' ', $site['name'], 2);
     $logo = h($parts[0]) . (isset($parts[1]) ? ' <span>' . h($parts[1]) . '</span>' : '');
@@ -79,6 +83,20 @@ function layout(array $site, array $m, string $body): string
         . '<footer class="bot"><div class="w"><p><strong>' . h($site['name']) . '</strong> — ' . h($site['tagline']) . '</p>'
         . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a><a href="/confidentialite/">Confidentialité</a><a href="/sitemap.xml">Plan du site</a></p>'
         . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer><script>setTimeout(function(){var d=new FormData();d.append("p",location.pathname);navigator.sendBeacon("/_pv",d)},1500)</script></body></html>';
+}
+
+// Menu « Offres d'emploi » déroulant : toutes les offres, régions, grandes villes.
+function jobs_menu(array $site): string
+{
+    $db = jobs_db($site['host']);
+    $counts = [];
+    foreach ($db->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
+    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a><span></span><b>Par région</b>';
+    foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $o .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . '</a>';
+    try { $cities = $db->query('SELECT slug, name FROM job_cities ORDER BY n DESC LIMIT 12')->fetchAll(); } catch (Throwable $e) { $cities = []; }
+    if ($cities) { $o .= '<b>Grandes villes</b>'; foreach ($cities as $c) $o .= '<a href="/offres-emploi/ville/' . h($c['slug']) . '/">' . h($c['name']) . '</a>'; }
+    return '<details class="dd"><summary><strong>Offres d\'emploi</strong></summary><nav class="ddp" aria-label="Offres d\'emploi par région">' . $o . '</nav></details>'
+        . '<script>document.addEventListener("click",function(e){document.querySelectorAll("details.dd[open]").forEach(function(d){if(!d.contains(e.target))d.removeAttribute("open")})})</script>';
 }
 
 function card(array $p, bool $h2 = true): string
