@@ -65,7 +65,7 @@ function layout(array $site, array $m, string $body): string
     if (!empty($m['image'])) $head .= '<meta property="og:image" content="' . h($m['image']) . '"><meta name="twitter:card" content="summary_large_image">';
     $head .= '<link rel="alternate" type="application/rss+xml" title="' . h($site['name']) . '" href="/feed/">';
     foreach ($m['schema'] ?? [] as $sc) $head .= '<script type="application/ld+json">' . json_encode($sc, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
-    if ($site['adsense'] && $pub && empty($m['noads'])) $head .= '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' . h($pub) . '" crossorigin="anonymous"></script>';
+    if ($site['adsense'] && $pub && empty($m['noads'])) $head .= '<script>(function(){var d=0;function l(){if(d)return;d=1;var s=document.createElement("script");s.async=1;s.crossOrigin="anonymous";s.src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' . h($pub) . '";document.head.appendChild(s)}["scroll","mousemove","touchstart","keydown"].forEach(function(e){addEventListener(e,l,{once:true,passive:true})});addEventListener("load",function(){setTimeout(l,2500)})})()</script>'; // AdSense différé : allège le chargement initial (Core Web Vitals)
     if ($ga = (setting('ga4_id:' . $site['host'], '') ?: setting('ga4_id', ''))) $head .= '<script async src="https://www.googletagmanager.com/gtag/js?id=' . h($ga) . '"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","' . h($ga) . '");</script>';
 
     $nav = ''; $navJobs = '';
@@ -129,6 +129,7 @@ function jobs_home_regions(array $site): string
         metier_tables($db);
         $top = $db->query('SELECT slug, name, n FROM job_metiers ORDER BY n DESC LIMIT 14')->fetchAll();
         if ($top) $o .= '<h2 style="font-size:1.15rem;margin:16px 0 4px">Métiers qui recrutent</h2>' . count_chips(array_map(fn($r) => [$r['name'], $r['n'], '/emploi/' . $r['slug'] . '/'], $top));
+        $o .= str_replace('<h2>', '<h2 style="font-size:1.15rem;margin:16px 0 4px">', intents_chips($db));
     }
     $np = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn();
     $na = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND contract='alternance'")->fetchColumn();
@@ -441,7 +442,8 @@ function page_plan(array $site): string
         jobs_cities_ready($db);
         $b .= '<h2>Par ville</h2>' . $li(array_map(fn($c) => ['Emploi ' . $c['name'], '/offres-emploi/ville/' . $c['slug'] . '/', $c['n']], $db->query('SELECT slug, name, n FROM job_cities ORDER BY name')->fetchAll()));
         if (function_exists('metier_tables')) $b .= '<h2>Métiers qui recrutent le plus</h2>' . $li(array_map(fn($m) => [$m['name'], '/emploi/' . $m['slug'] . '/', $m['n']], $db->query('SELECT slug, name, n FROM job_metiers ORDER BY n DESC LIMIT 60')->fetchAll()))
-            . '<p><a href="/emploi/">Tous les métiers de A à Z →</a></p>';
+            . '<p><a href="/emploi/">Tous les métiers de A à Z →</a> · <a href="/salaire/">Salaires par métier →</a></p>'
+            . (function_exists('intent_counts') ? '<h2>Recherches populaires</h2>' . $li(array_values(array_filter(array_map(fn($k, $v) => (($c = intent_counts($db)[$k] ?? 0) >= 5) ? [$v[0], '/' . $k . '/', $c] : null, array_keys(JOB_INTENTS), JOB_INTENTS)))) : '');
     }
     $cats = site_categories($site);
     if ($cats) $b .= '<h2>Rubriques</h2>' . $li(array_map(fn($c) => [nav_label($c['name']), '/category/' . $c['slug'] . '/', $c['n']], $cats));
