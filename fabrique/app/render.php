@@ -91,7 +91,7 @@ function layout(array $site, array $m, string $body): string
               . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></header>')
         . '<main class="w">' . $body . '</main>'
         . '<footer class="bot"><div class="w"><p><strong>' . h($site['name']) . '</strong> — ' . h($site['tagline']) . '</p>'
-        . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a><a href="/confidentialite/">Confidentialité</a><a href="/sitemap.xml">Plan du site</a></p>'
+        . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a>' . (!empty($site['jobs']) ? '<a href="/nos-sources/">Nos sources</a>' : '') . '<a href="/confidentialite/">Confidentialité</a><a href="/sitemap.xml">Plan du site</a></p>'
         . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer><script>setTimeout(function(){var d=new FormData();d.append("p",location.pathname);navigator.sendBeacon("/_pv",d)},1500)</script></body></html>';
 }
 
@@ -102,7 +102,7 @@ function jobs_menu(array $site): string
     $counts = [];
     foreach ($db->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
     $hasCsp = (bool)$db->query("SELECT 1 FROM jobs WHERE status='open' AND id LIKE 'csp-%' LIMIT 1")->fetchColumn();
-    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($hasCsp ? '<a href="/emploi-public/"><strong>Emploi public</strong></a>' : '<span></span>') . '<b>Par région</b>';
+    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($hasCsp ? '<a href="/emploi-public/"><strong>Emploi public</strong></a>' : '<span></span>') . '<a href="/emploi/"><strong>Offres par métier</strong></a><span></span><b>Par région</b>';
     foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $o .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . '</a>';
     try { $cities = $db->query('SELECT slug, name FROM job_cities ORDER BY n DESC LIMIT 12')->fetchAll(); } catch (Throwable $e) { $cities = []; }
     if ($cities) { $o .= '<b>Grandes villes</b>'; foreach ($cities as $c) $o .= '<a href="/offres-emploi/ville/' . h($c['slug']) . '/">' . h($c['name']) . '</a>'; }
@@ -113,13 +113,33 @@ function jobs_menu(array $site): string
 // Accès direct aux offres par région en tête de l'accueil d'un site d'emploi.
 function jobs_home_regions(array $site): string
 {
+    $db = jobs_db($site['host']);
     $counts = [];
-    foreach (jobs_db($site['host'])->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
+    foreach ($db->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
     if (!$counts) return '';
+    $nf = fn($n) => number_format($n, 0, ',', ' ');
+    $total = array_sum($counts);
+    $o = '<section class="jhome" style="margin:22px 0 30px"><h1 style="margin:0 0 6px">' . $nf($total) . ' offres d\'emploi en France</h1>'
+        . '<p style="margin:0 0 6px">CDI, CDD, intérim, alternance et emploi public, dans toutes les régions. Mis à jour le ' . h(date_fr(now())) . '.</p>';
+    if (function_exists('fr_map')) $o .= '<style>' . fr_map_css() . '</style><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><div style="flex:1 1 380px">' . fr_map($counts, '/offres-emploi/') . '</div><div style="flex:1 1 300px">';
     $l = '';
-    foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $l .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . ' <small>(' . number_format($counts[$code], 0, ',', ' ') . ')</small></a>';
-    return '<section class="box" style="margin:22px 0;padding:16px 20px;border:1px solid var(--b);border-radius:12px"><h2 style="margin:0 0 10px;font-size:1.25rem">Offres d\'emploi par région — ' . number_format(array_sum($counts), 0, ',', ' ') . ' offres</h2>'
-        . '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;font-size:.95rem">' . $l . '</div><p style="margin:10px 0 0"><a href="/offres-emploi/"><strong>Voir toutes les offres →</strong></a></p></section>';
+    foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $l .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . ' <small>(' . $nf($counts[$code]) . ')</small></a>';
+    $o .= '<h2 style="font-size:1.15rem;margin:8px 0">Par région</h2><div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.95rem">' . $l . '</div>';
+    if (function_exists('metier_tables')) {
+        metier_tables($db);
+        $top = $db->query('SELECT slug, name, n FROM job_metiers ORDER BY n DESC LIMIT 14')->fetchAll();
+        if ($top) $o .= '<h2 style="font-size:1.15rem;margin:16px 0 4px">Métiers qui recrutent</h2>' . count_chips(array_map(fn($r) => [$r['name'], $r['n'], '/emploi/' . $r['slug'] . '/'], $top));
+    }
+    $np = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn();
+    $na = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND contract='alternance'")->fetchColumn();
+    $o .= '<p style="margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px">'
+        . ($np ? '<a class="btn" style="background:var(--c);color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none" href="/emploi-public/">Emploi public (' . $nf($np) . ')</a>' : '')
+        . ($na ? '<a class="btn" style="background:var(--c);color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none" href="/offres-emploi/' . JOB_REGIONS['11'][0] . '/?contrat=alternance">Alternance (' . $nf($na) . ')</a>' : '')
+        . '<a class="btn" style="background:#fff;color:var(--c);border:1px solid var(--c);padding:7px 14px;border-radius:8px;text-decoration:none" href="/emploi/">Tous les métiers</a></p>';
+    if (function_exists('fr_map')) $o .= '</div></div>';
+    $latest = $db->query("SELECT * FROM jobs WHERE status='open' ORDER BY created_at DESC LIMIT 6")->fetchAll();
+    $o .= '<h2>Dernières offres publiées</h2><div class="grid">' . implode('', array_map('job_card', $latest)) . '</div><p><a href="/offres-emploi/"><strong>Voir toutes les offres d\'emploi →</strong></a></p></section><h2>Conseils emploi et carrière</h2>';
+    return $o;
 }
 
 // Libellé de menu en casse française (« Cv Et Lettre De Motivation » -> « CV et lettre de motivation »).
@@ -170,7 +190,7 @@ function page_home(array $site, int $page): string
     [$posts, $pages] = list_posts($site, '', [], $page);
     if ($page > 1 && !$posts) return '';
     $body = $page == 1 ? '<h1 style="margin:28px 0 0;font-size:1.7rem">' . h($site['name']) . ' — ' . h($site['tagline']) . '</h1>' : '<h1 style="margin:28px 0 0;font-size:1.5rem">Articles — page ' . $page . '</h1>';
-    if ($page == 1 && !empty($site['jobs']) && function_exists('jobs_db')) $body .= jobs_home_regions($site);
+    if ($page == 1 && !empty($site['jobs']) && function_exists('jobs_db') && ($jh = jobs_home_regions($site)) !== '') $body = $jh; // site d'emploi : l'accueil commence par les offres (h1 unique)
     if ($page == 1 && !empty($site['fuel']) && function_exists('fuel_home_block')) $body .= fuel_home_block($site) . '<h2>Nos derniers guides</h2>';
     if ($page == 1 && function_exists('places_mod') && places_mod($site) && ($pb = places_home_block($site))) $body .= $pb . '<h2>Nos derniers guides</h2>';
     if ($page == 1 && !empty($site['commune']) && function_exists('commune_home_block') && ($cb = commune_home_block($site))) $body .= $cb . '<h2>Nos derniers guides</h2>';
@@ -383,6 +403,18 @@ function page_static(array $site, string $key): string
         'mentions-legales' => ['Mentions légales', '<p><strong>Éditeur :</strong> ' . ($editor !== '' ? h($editor) : 'l\'équipe de ' . h($site['name']) . ', éditeur non professionnel. Conformément à l\'article 6-III-2 de la loi n° 2004-575 du 21 juin 2004 (LCEN), ses éléments d\'identification ont été communiqués à l\'hébergeur') . '. Contact : ' . h($email) . '.</p><p><strong>Hébergement :</strong> o2switch, Chemin des Pardiaux, 63000 Clermont-Ferrand, France.</p><p>Les informations publiées sont fournies à titre indicatif et ne remplacent pas l\'avis d\'un professionnel.</p>' . ($site['amazon'] ? '<p>Ce site participe au Programme Partenaires d\'Amazon EU, un programme d\'affiliation conçu pour permettre à des sites de percevoir une rémunération grâce à la création de liens vers Amazon.fr.</p>' : '')],
         'confidentialite' => ['Politique de confidentialité', '<p>Ce site ne collecte aucune donnée personnelle directement. Des partenaires tiers, dont Google, utilisent des cookies pour diffuser des annonces en fonction de vos visites sur ce site et d\'autres sites. Vous pouvez désactiver la publicité personnalisée dans les <a href="https://adssettings.google.com" rel="nofollow">paramètres des annonces Google</a>. Pour en savoir plus : <a href="https://policies.google.com/technologies/partner-sites" rel="nofollow">règles de confidentialité des partenaires Google</a>.</p><p>Mesure d\'audience : statistiques anonymes et agrégées.</p>'],
     ];
+    if (!empty($site['jobs'])) { // site d'emploi : provenance des offres, transparence (confiance, E-E-A-T)
+        $pages['nos-sources'] = ['Nos sources', '<p>' . h($site['name']) . ' rassemble des offres d\'emploi publiques et partenaires, mises à jour plusieurs fois par jour. Nous ne sommes pas recruteur : chaque offre renvoie vers son site d\'origine, où se fait la candidature.</p>'
+            . '<h2>D\'où viennent les offres ?</h2><ul>'
+            . '<li><strong>France Travail</strong> (ex-Pôle emploi) : offres d\'emploi publiées par les entreprises et partenaires, via l\'API officielle « Offres d\'emploi » (francetravail.io).</li>'
+            . '<li><strong>Choisir le service public</strong> : offres des trois fonctions publiques (État, territoriale, hospitalière), plateforme officielle de la DGAFP, données publiques sous Licence Ouverte.</li>'
+            . '<li><strong>La bonne alternance</strong> : offres en alternance, formations en apprentissage et entreprises qui recrutent en alternance, via l\'API Apprentissage de l\'État (beta.gouv.fr).</li>'
+            . '<li><strong>Adzuna</strong> et <strong>Careerjet</strong> : agrégateurs d\'offres partenaires (liens sponsorisés).</li>'
+            . '<li><strong>Missions locales</strong> : annuaire officiel, via l\'API Apprentissage.</li></ul>'
+            . '<h2>Mise à jour et retrait des offres</h2><p>Les offres sont actualisées automatiquement plusieurs fois par jour. Une offre pourvue ou expirée est retirée et redirige vers une offre proche encore ouverte. Les salaires médians affichés sont calculés à partir des offres qui indiquent une rémunération.</p>'
+            . '<h2>Un problème sur une offre ?</h2><p>Signalez-le à <a href="mailto:' . h($email) . '">' . h($email) . '</a> : nous la retirons rapidement.</p>'];
+        $pages['a-propos'][1] .= '<p>Pour les offres d\'emploi, consultez <a href="/nos-sources/">nos sources</a> : France Travail, Choisir le service public, La bonne alternance et nos partenaires.</p>';
+    }
     if (!isset($pages[$key])) return '';
     [$t, $c] = $pages[$key];
     return layout($site, ['title' => $t . ' | ' . $site['name'], 'desc' => $t . ' — ' . $site['name'], 'canonical' => 'https://' . $site['host'] . "/$key/", 'noads' => true],
