@@ -28,6 +28,7 @@ function out_sitemap_index(array $site): void
     if (!empty($site['dpe'])) echo '<sitemap><loc>https://' . $site['host'] . '/sitemap-dpe.xml</loc></sitemap>';
     if (!empty($site['ev'])) for ($i = 1; $i <= ev_sitemap_count($site); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-bornes-$i.xml</loc></sitemap>";
     if (!empty($site['jobs'])) for ($i = 1; $i <= jobs_sitemap_count($site); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-jobs-$i.xml</loc></sitemap>";
+    if (!empty($site['jobs'])) echo '<sitemap><loc>https://' . $site['host'] . '/sitemap-metiers.xml</loc></sitemap>';
     echo '</sitemapindex>';
 }
 
