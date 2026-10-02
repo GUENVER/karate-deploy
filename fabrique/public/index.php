@@ -10,6 +10,7 @@ require dirname(__DIR__) . '/app/careerjet.php';
 require dirname(__DIR__) . '/app/lba_blocks.php';
 require dirname(__DIR__) . '/app/csp.php';
 require dirname(__DIR__) . '/app/fr_map.php';
+require dirname(__DIR__) . '/app/metiers.php';
 require dirname(__DIR__) . '/app/fuel.php';
 require dirname(__DIR__) . '/app/ev.php';
 require dirname(__DIR__) . '/app/places.php';
@@ -42,6 +43,7 @@ switch ($path) {
 }
 if (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) { out_sitemap_posts($site, (int)$m[1]); exit; }
 if ($site['jobs'] && preg_match('#^/sitemap-jobs-(\d+)\.xml$#', $path, $m)) { out_sitemap_jobs($site, (int)$m[1]); exit; }
+if ($site['jobs'] && $path === '/sitemap-metiers.xml') { out_sitemap_metiers($site); exit; }
 if (!empty($site['commune']) && preg_match('#^/sitemap-communes-(\d+)\.xml$#', $path, $m)) { out_sitemap_communes($site, (int)$m[1]); exit; }
 if (!empty($site['dpe']) && $path === '/sitemap-dpe.xml') { out_sitemap_dpe($site); exit; }
 if (places_mod($site) && $path === '/sitemap-lieux.xml') { out_sitemap_places($site); exit; }
@@ -93,7 +95,7 @@ function route(array $site, string $path): ?string
     if ($path === '/') return page_home($site, 1);
     if (preg_match('#^/page/(\d+)/?$#', $path, $m)) return page_home($site, (int)$m[1]);
     if (preg_match('#^/category/(?:[^/]+/)*([^/]+)/(?:page/(\d+)/?)?$#', $path, $m) && ($h = page_category($site, $m[1], (int)($m[2] ?? 1) ?: 1)) !== '') return $h;
-    if (preg_match('#^/(a-propos|contact|mentions-legales|confidentialite)/?$#', $path, $m)) return page_static($site, $m[1]);
+    if (preg_match('#^/(a-propos|contact|mentions-legales|confidentialite|nos-sources)/?$#', $path, $m)) return page_static($site, $m[1]);
     if (!empty($site['fuel'])) {
         if ($path === '/prix-carburant/') return page_fuel_france($site);
         if (preg_match('#^/prix-carburant/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m) && ($dept = dept_by_slug($m[1])))
@@ -128,6 +130,8 @@ function route(array $site, string $path): ?string
             $c = (string)($_GET['contrat'] ?? '');
             return page_jobs_region($site, $reg, max(1, (int)($m[2] ?? 1)), isset(JOB_CONTRACTS[$c]) ? $c : '');
         }
+        if ($path === '/emploi/') return page_metiers_index($site);
+        if (preg_match('#^/emploi/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m)) return page_metier($site, $m[1], $m[2] ?? '');
         if ($path === '/emploi-public/') return page_emploi_public($site);
         if (preg_match('#^/emploi-public/versant/(etat|territoriale|hospitaliere)/(?:page/(\d+)/)?$#', $path, $m)) return page_emploi_public_list($site, null, $m[1], max(1, (int)($m[2] ?? 1)));
         if (preg_match('#^/emploi-public/([a-z\-]+)/(?:page/(\d+)/)?$#', $path, $m) && ($reg = region_by_slug($m[1]))) return page_emploi_public_list($site, $reg, '', max(1, (int)($m[2] ?? 1)));
