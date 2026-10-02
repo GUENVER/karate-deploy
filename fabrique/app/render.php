@@ -56,7 +56,7 @@ function layout(array $site, array $m, string $body): string
     $head .= '<link rel="alternate" type="application/rss+xml" title="' . h($site['name']) . '" href="/feed/">';
     foreach ($m['schema'] ?? [] as $sc) $head .= '<script type="application/ld+json">' . json_encode($sc, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
     if ($site['adsense'] && $pub && empty($m['noads'])) $head .= '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' . h($pub) . '" crossorigin="anonymous"></script>';
-    if ($ga = setting('ga4_id', '')) $head .= '<script async src="https://www.googletagmanager.com/gtag/js?id=' . h($ga) . '"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","' . h($ga) . '");</script>';
+    if ($ga = (setting('ga4_id:' . $site['host'], '') ?: setting('ga4_id', ''))) $head .= '<script async src="https://www.googletagmanager.com/gtag/js?id=' . h($ga) . '"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","' . h($ga) . '");</script>';
 
     $nav = '';
     if (!empty($site['fuel'])) $nav .= '<a href="/prix-carburant/"><strong>Prix carburant</strong></a>';
