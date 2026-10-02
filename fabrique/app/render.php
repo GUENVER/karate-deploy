@@ -44,7 +44,7 @@ aside ul{padding-left:18px;margin:0;font-size:.93rem}aside li{margin:6px 0}.pag{
 .ddp{position:absolute;left:0;top:36px;z-index:50;background:#fff;border:1px solid var(--b);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:14px 18px;width:min(560px,92vw);display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;font-size:.9rem}
 .ddp b{grid-column:1/-1;margin:8px 0 2px;color:var(--c);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}.ddp a{color:var(--t)!important;padding:3px 0}.ddp a:hover{color:var(--c)!important}
 @media(max-width:700px){.ddp{position:static;box-shadow:none;width:100%;margin-top:8px}}
-header.hl .hlw{justify-content:center;padding:16px 16px 10px}.hlogo img{height:70px;width:auto;display:block}
+header.hl .hlw{justify-content:center;padding:10px 16px 8px}.hlogo img{height:70px;width:auto;display:block}
 .hnav{border-top:1px solid var(--b);background:var(--s)}.hnav .w{display:flex;align-items:center;gap:14px;padding:8px 16px}
 .hnav nav.cats{flex:1;flex-wrap:nowrap;overflow-x:auto;gap:4px;scrollbar-width:none;justify-content:flex-start}.hnav nav.cats::-webkit-scrollbar{display:none}
 .hnav nav.cats a{white-space:nowrap;padding:5px 11px;border-radius:8px;color:var(--t);font-weight:500}.hnav nav.cats a:hover,.hnav nav.cats a[aria-current]{background:#fff;color:var(--c);box-shadow:0 1px 3px rgba(0,0,0,.08)}
@@ -84,7 +84,7 @@ function layout(array $site, array $m, string $body): string
     return '<!doctype html><html lang="' . h($site['lang'] ?: 'fr') . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         . $head . '<style>' . css($site) . '</style></head><body>'
         . (($lg = setting('logo:' . $site['host'], ''))
-            ? '<header class="top hl"><div class="w hlw"><a class="hlogo" href="/" aria-label="' . h($site['name']) . ' — accueil"><img src="' . h($lg) . '" alt="' . h($site['name']) . '" width="272" height="70" fetchpriority="high"></a></div>'
+            ? '<header class="top hl"><div class="w hlw"><a class="hlogo" href="/" aria-label="' . h($site['name']) . ' — accueil"><img src="' . h($lg) . '" alt="' . h($site['name']) . '" width="288" height="70" fetchpriority="high"></a></div>'
               . '<div class="hnav"><div class="w">' . $navJobs . '<nav class="cats" aria-label="Rubriques">' . $nav . '</nav>'
               . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></div></header>'
             : '<header class="top"><div class="w"><a class="logo" href="/">' . $logo . '</a><nav class="cats">' . $navJobs . $nav . '</nav>'
