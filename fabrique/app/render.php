@@ -91,7 +91,7 @@ function layout(array $site, array $m, string $body): string
               . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></header>')
         . '<main class="w">' . $body . '</main>'
         . '<footer class="bot"><div class="w"><p><strong>' . h($site['name']) . '</strong> — ' . h($site['tagline']) . '</p>'
-        . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a>' . (!empty($site['jobs']) ? '<a href="/nos-sources/">Nos sources</a>' : '') . '<a href="/confidentialite/">Confidentialité</a><a href="/sitemap.xml">Plan du site</a></p>'
+        . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a>' . (!empty($site['jobs']) ? '<a href="/nos-sources/">Nos sources</a>' : '') . '<a href="/confidentialite/">Confidentialité</a><a href="/plan-du-site/">Plan du site</a></p>'
         . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer><script>setTimeout(function(){var d=new FormData();d.append("p",location.pathname);navigator.sendBeacon("/_pv",d)},1500)</script></body></html>';
 }
 
@@ -419,6 +419,35 @@ function page_static(array $site, string $key): string
     [$t, $c] = $pages[$key];
     return layout($site, ['title' => $t . ' | ' . $site['name'], 'desc' => $t . ' — ' . $site['name'], 'canonical' => 'https://' . $site['host'] . "/$key/", 'noads' => true],
         '<article style="max-width:760px;margin:30px 0"><h1>' . h($t) . '</h1>' . $c . '</article>');
+}
+
+// Plan du site lisible par les visiteurs (le sitemap XML reste destiné aux moteurs de recherche).
+function page_plan(array $site): string
+{
+    $li = fn(array $links) => '<ul style="columns:2 260px;padding-left:18px">' . implode('', array_map(fn($l) => '<li><a href="' . h($l[1]) . '">' . h($l[0]) . '</a>' . (isset($l[2]) ? ' <small>(' . number_format((int)$l[2], 0, ',', ' ') . ')</small>' : '') . '</li>', $links)) . '</ul>';
+    $b = '<h1 style="margin-top:28px">Plan du site</h1>';
+    $b .= '<h2>Pages principales</h2>' . $li([['Accueil', '/'], ['À propos', '/a-propos/'], ['Contact', '/contact/'], ['Mentions légales', '/mentions-legales/'], ['Confidentialité', '/confidentialite/']]
+        + (!empty($site['jobs']) ? [5 => ['Nos sources', '/nos-sources/']] : []));
+    if (!empty($site['jobs']) && function_exists('jobs_db')) {
+        $db = jobs_db($site['host']);
+        $counts = [];
+        foreach ($db->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
+        $jl = [['Toutes les offres d\'emploi', '/offres-emploi/', array_sum($counts)]];
+        if (function_exists('csp_tables') && ($np = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn())) $jl[] = ['Emploi public', '/emploi-public/', $np];
+        if (function_exists('metier_tables')) { metier_tables($db); $jl[] = ['Offres par métier', '/emploi/', (int)$db->query('SELECT COUNT(*) FROM job_metiers')->fetchColumn()]; }
+        $b .= '<h2>Offres d\'emploi</h2>' . $li($jl);
+        $rl = []; foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $rl[] = ['Emploi ' . $name, '/offres-emploi/' . $slug . '/', $counts[$code]];
+        $b .= '<h2>Par région</h2>' . $li($rl);
+        jobs_cities_ready($db);
+        $b .= '<h2>Par ville</h2>' . $li(array_map(fn($c) => ['Emploi ' . $c['name'], '/offres-emploi/ville/' . $c['slug'] . '/', $c['n']], $db->query('SELECT slug, name, n FROM job_cities ORDER BY name')->fetchAll()));
+        if (function_exists('metier_tables')) $b .= '<h2>Métiers qui recrutent le plus</h2>' . $li(array_map(fn($m) => [$m['name'], '/emploi/' . $m['slug'] . '/', $m['n']], $db->query('SELECT slug, name, n FROM job_metiers ORDER BY n DESC LIMIT 60')->fetchAll()))
+            . '<p><a href="/emploi/">Tous les métiers de A à Z →</a></p>';
+    }
+    $cats = site_categories($site);
+    if ($cats) $b .= '<h2>Rubriques</h2>' . $li(array_map(fn($c) => [nav_label($c['name']), '/category/' . $c['slug'] . '/', $c['n']], $cats));
+    $b .= '<p class="disc">Pour les moteurs de recherche : <a href="/sitemap.xml">sitemap XML</a>.</p>';
+    return layout($site, ['title' => 'Plan du site | ' . $site['name'], 'desc' => 'Plan du site ' . $site['name'] . ' : toutes les rubriques' . (!empty($site['jobs']) ? ', régions, villes et métiers' : '') . '.',
+        'canonical' => 'https://' . $site['host'] . '/plan-du-site/', 'noads' => true], $b);
 }
 
 function page_404(array $site): string
