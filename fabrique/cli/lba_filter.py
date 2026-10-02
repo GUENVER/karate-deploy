@@ -19,12 +19,26 @@ def region(postal):
     return DEP_REG.get(postal[:3]) if postal.startswith('97') else DEP_REG.get(postal[:2])
 
 src, out = sys.argv[1], sys.argv[2]
+out_rec = sys.argv[3] if len(sys.argv) > 3 else None
 data = json.load(open(src, encoding='utf-8'))
 n = 0
+fr = open(out_rec, 'w', encoding='utf-8') if out_rec else None
 with open(out, 'w', encoding='utf-8') as f:
     for x in data:
         ident = x.get('identifier') or {}
-        if ident.get('partner_label') in ('recruteurs_lba', 'France Travail'):
+        if ident.get('partner_label') == 'recruteurs_lba':
+            # entreprises susceptibles de recruter en alternance (candidature spontanée)
+            if fr:
+                w, a = x.get('workplace') or {}, x.get('apply') or {}
+                loc = w.get('location') or {}
+                m = re.search(r'\b(\d{5})\b\s*(.*)$', (loc.get('address') or '').strip())
+                if m and region(m.group(1)) and a.get('url'):
+                    co = ((loc.get('geopoint') or {}).get('coordinates') or [None, None])
+                    fr.write(json.dumps({'siret': w.get('siret') or ident.get('partner_job_id'), 'name': (w.get('brand') or w.get('name') or w.get('legal_name') or '').strip(),
+                        'naf': ((w.get('domain') or {}).get('naf') or {}).get('label') or '', 'size': w.get('size') or '', 'city': m.group(2).strip().title(),
+                        'postal': m.group(1), 'region': region(m.group(1)), 'lon': co[0], 'lat': co[1], 'url': a['url']}, ensure_ascii=False) + '\n')
+            continue
+        if ident.get('partner_label') == 'France Travail':
             continue
         o, w, c, a = x.get('offer') or {}, x.get('workplace') or {}, x.get('contract') or {}, x.get('apply') or {}
         if o.get('status') != 'Active' or not o.get('title') or not a.get('url'):
@@ -53,6 +67,9 @@ with open(out, 'w', encoding='utf-8') as f:
             'worktime': (str(dur) + ' mois') if dur else '', 'salary': '', 'experience': ('Diplôme visé : ' + dipl) if dipl else '',
             'sector': ((w.get('domain') or {}).get('naf') or {}).get('label') or '', 'url': a['url'],
             'created_at': ((o.get('publication') or {}).get('creation') or '')[:19].replace('T', ' '),
+            '_romes': ','.join(o.get('rome_codes') or []), '_lon': ((w.get('location') or {}).get('geopoint') or {}).get('coordinates', [None, None])[0], '_lat': ((w.get('location') or {}).get('geopoint') or {}).get('coordinates', [None, None])[1],
         }, ensure_ascii=False) + '\n')
         n += 1
+if fr:
+    fr.close()
 print(n)
