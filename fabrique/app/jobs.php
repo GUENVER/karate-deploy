@@ -362,6 +362,7 @@ function page_jobs_region(array $site, array $reg, int $page, string $contract):
         . $chips . '<div class="grid">' . implode('', array_map('job_card', $jobs)) . '</div>'
         . pager($base, $page, (int)ceil($total / $per))
         . ($guides ? '<h2>Nos conseils pour décrocher le poste</h2><ul>' . implode('', array_map(fn($g) => '<li><a href="' . h($g['path']) . '">' . h($g['title']) . '</a></li>', $guides)) . '</ul>' : '')
+        . careerjet_slot($site, $contract ? JOB_CONTRACTS[$contract] : '', $reg['name'])
         . jobs_disclaimer();
     return layout($site, [
         'title' => $title . ($page > 1 ? " — page $page" : '') . ' | ' . $site['name'], 'desc' => "$total offres d'emploi en {$reg['name']} : CDI, CDD, intérim, alternance. Postulez directement auprès des recruteurs.",
@@ -445,6 +446,7 @@ function page_jobs_city(array $site, string $slug): string
         . '<p><a href="/offres-emploi/' . h($reg[0]) . '/">Toutes les offres d\'emploi en ' . h($reg[1]) . '</a></p>'
         . '<h2>Questions fréquentes</h2>' . implode('', array_map(fn($f) => '<h3>' . h($f[0]) . '</h3><p>' . h($f[1]) . '</p>', $faq))
         . ($others ? '<h2>Autres villes qui recrutent en ' . h($reg[1]) . '</h2><p>' . city_links($others) . '.</p>' : '')
+        . careerjet_slot($site, '', $name)
         . jobs_disclaimer();
     $schema = [breadcrumbs($site, [['Offres d\'emploi', '/offres-emploi/'], [$reg[1], '/offres-emploi/' . $reg[0] . '/'], ['Emploi ' . $name, $base]]),
         ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => array_map(fn($f) => ['@type' => 'Question', 'name' => $f[0], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f[1]]], $faq)]];
