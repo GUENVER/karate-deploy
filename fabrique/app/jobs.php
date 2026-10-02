@@ -216,6 +216,23 @@ function page_jobs_region(array $site, array $reg, int $page, string $contract):
     ], $body);
 }
 
+// Offre ouverte la plus proche d'une offre expirée : mots du titre communs, même département, même contrat, même région.
+function job_best_match(PDO $db, array $j): ?string
+{
+    $words = fn(string $t) => array_filter(preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($t)), fn($w) => mb_strlen($w) > 2 && !in_array($w, ['les', 'des', 'une', 'pour', 'avec', 'sur'], true));
+    $ref = array_flip($words((string)$j['title']));
+    $dep = substr((string)$j['postal'], 0, 2);
+    $st = $db->prepare("SELECT slug, title, postal, contract FROM jobs WHERE status='open' AND region=? AND id<>? ORDER BY created_at DESC LIMIT 400");
+    $st->execute([$j['region'], $j['id']]);
+    $best = null; $bs = 0;
+    foreach ($st as $c) {
+        $common = count(array_intersect_key(array_flip($words((string)$c['title'])), $ref));
+        $s = 4 * $common + ($dep !== '' && substr((string)$c['postal'], 0, 2) === $dep ? 2 : 0) + ($c['contract'] === $j['contract'] ? 1 : 0);
+        if ($s > $bs) { $bs = $s; $best = $c['slug']; }
+    }
+    return $bs >= 4 ? $best : null; // au moins un mot du titre en commun, sinon page 410 avec offres similaires
+}
+
 function page_job(array $site, string $slug): ?string
 {
     $db = jobs_db($site['host']);
@@ -226,6 +243,11 @@ function page_job(array $site, string $slug): ?string
     $st = $db->prepare("SELECT * FROM jobs WHERE status='open' AND region=? AND id<>? ORDER BY (contract=?) DESC, created_at DESC LIMIT 6"); $st->execute([$j['region'], $j['id'], $j['contract']]);
     $similar = $st->fetchAll();
     $closed = $j['status'] !== 'open';
+    if ($closed && ($to = job_best_match($db, $j))) { // offre expirée : 301 vers l'offre ouverte la plus proche
+        $qs = (string)($_SERVER['QUERY_STRING'] ?? '');
+        header('Location: /offre/' . $to . '/' . ($qs !== '' ? '?' . $qs : ''), true, 301);
+        return null;
+    }
     if ($closed) http_response_code(410);
     $facts = array_filter(['Entreprise' => $j['company'], 'Lieu' => trim($j['city'] . ' ' . $j['postal']), 'Contrat' => $j['contract_label'] ?: (JOB_CONTRACTS[$j['contract']] ?? ''),
         'Durée du travail' => $j['worktime'], 'Salaire' => $j['salary'], 'Expérience' => $j['experience'], 'Secteur' => $j['sector']]);
