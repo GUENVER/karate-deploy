@@ -44,6 +44,7 @@ switch ($path) {
 if (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) { out_sitemap_posts($site, (int)$m[1]); exit; }
 if ($site['jobs'] && preg_match('#^/sitemap-jobs-(\d+)\.xml$#', $path, $m)) { out_sitemap_jobs($site, (int)$m[1]); exit; }
 if ($site['jobs'] && $path === '/sitemap-metiers.xml') { out_sitemap_metiers($site); exit; }
+if ($site['jobs'] && $path === '/sitemap-priorite.xml') { out_sitemap_priority($site); exit; }
 if (!empty($site['commune']) && preg_match('#^/sitemap-communes-(\d+)\.xml$#', $path, $m)) { out_sitemap_communes($site, (int)$m[1]); exit; }
 if (!empty($site['dpe']) && $path === '/sitemap-dpe.xml') { out_sitemap_dpe($site); exit; }
 if (places_mod($site) && $path === '/sitemap-lieux.xml') { out_sitemap_places($site); exit; }
