@@ -153,7 +153,10 @@ function page_emploi_public(array $site): string
     $cats = []; foreach ($db->query("SELECT substr(m.categorie,1,11) c, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . " AND m.categorie LIKE 'Catégorie%' GROUP BY c ORDER BY c") as $r) $cats[] = h(trim($r['c'])) . ' : ' . $nf((int)$r['n']);
     $body = '<h1 style="margin-top:28px">Emploi public : offres de la fonction publique</h1>'
         . '<p>' . $nf($total) . ' offres d\'emploi dans les trois fonctions publiques (État, territoriale, hospitalière), ouvertes aux fonctionnaires et, pour beaucoup, aux contractuels sans concours. Mises à jour chaque jour.</p>'
-        . $kpi . ($cats ? '<p><small>' . implode(' · ', $cats) . '</small></p>' : '')
+        . $kpi
+        . (function_exists('fr_map') ? '<style>' . fr_map_css() . '</style>' . fr_map($byR, '/emploi-public/') : '')
+        . '<h2>Offres par catégorie</h2>' . count_chips(array_map(fn($r) => [$r['c'], $r['n'], ''], $db->query("SELECT CASE WHEN m.categorie LIKE 'Catégorie A+%' THEN 'Catégorie A+' WHEN m.categorie LIKE 'Catégorie A%' THEN 'Catégorie A' WHEN m.categorie LIKE 'Catégorie B%' THEN 'Catégorie B' WHEN m.categorie LIKE 'Catégorie C%' THEN 'Catégorie C' ELSE 'Non précisée' END c, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . " GROUP BY c ORDER BY c")->fetchAll()))
+        . '<h2>Offres par domaine</h2>' . count_chips(array_map(fn($r) => [$r['domaine'], $r['n'], ''], $db->query("SELECT m.domaine, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . " AND m.domaine<>'' GROUP BY m.domaine ORDER BY n DESC LIMIT 24")->fetchAll()))
         . '<h2>Emploi public par région</h2><div class="grid">' . $regs . '</div>'
         . '<h2>Dernières offres publiées</h2><div class="grid">' . implode('', array_map('job_card', $latest)) . '</div>'
         . '<h2>Travailler dans la fonction publique sans concours</h2><p>De nombreux postes sont ouverts aux <strong>contractuels</strong> : la mention « Emploi ouvert aux titulaires et aux contractuels » figure sur l\'offre. Les catégories indiquent le niveau : <strong>A</strong> (conception, encadrement, bac+3 et plus), <strong>B</strong> (application, bac à bac+2), <strong>C</strong> (exécution, sans diplôme ou CAP/BEP).</p>'
