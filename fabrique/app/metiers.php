@@ -14,7 +14,8 @@ function metier_tables(PDO $db): void
     $db->exec('CREATE TABLE IF NOT EXISTS job_metiers(slug TEXT PRIMARY KEY, name TEXT, n INTEGER, updated TEXT);
         CREATE TABLE IF NOT EXISTS job_metier_map(id TEXT PRIMARY KEY, mslug TEXT, cslug TEXT);
         CREATE INDEX IF NOT EXISTS ix_jmm_m ON job_metier_map(mslug, cslug);
-        CREATE TABLE IF NOT EXISTS job_metier_cities(mslug TEXT, cslug TEXT, n INTEGER, PRIMARY KEY(mslug, cslug));');
+        CREATE TABLE IF NOT EXISTS job_metier_cities(mslug TEXT, cslug TEXT, n INTEGER, PRIMARY KEY(mslug, cslug));
+        CREATE TABLE IF NOT EXISTS job_metier_sal(slug TEXT PRIMARY KEY, n INTEGER, med REAL, p25 REAL, p75 REAL);');
 }
 
 // Intitulé d'offre → [clé, libellé] du métier, ou null.
@@ -64,6 +65,11 @@ function metiers_build(PDO $db): array
     $ix = $db->prepare('INSERT OR REPLACE INTO job_metier_map(id,mslug,cslug) VALUES(?,?,?)');
     foreach ($map as $r) if (isset($keep[$r[1]])) $ix->execute($r);
     $db->exec('INSERT INTO job_metier_cities(mslug,cslug,n) SELECT mslug, cslug, COUNT(*) FROM job_metier_map WHERE cslug<>\'\' GROUP BY mslug, cslug HAVING COUNT(*) >= ' . METIER_CITY_MIN);
+    $db->commit();
+    // salaires par métier (pages /salaire/)
+    $db->beginTransaction(); $db->exec('DELETE FROM job_metier_sal');
+    $is = $db->prepare('INSERT INTO job_metier_sal(slug,n,med,p25,p75) VALUES(?,?,?,?,?)');
+    foreach (array_keys($keep) as $k) if (($s = metier_salary_stats(metier_jobs($db, (string)$k))) && $s['n'] >= 8) $is->execute([$k, $s['n'], $s['med'], $s['p25'], $s['p75']]);
     $db->commit();
     return ['metiers' => count($keep), 'combos' => (int)$db->query('SELECT COUNT(*) FROM job_metier_cities')->fetchColumn()];
 }
@@ -121,7 +127,7 @@ function page_metier(array $site, string $mslug, string $cslug = ''): string
     $parts = [];
     $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/emploi/">Métiers</a> › ' . ($city ? '<a href="/emploi/' . h($mslug) . '/">' . h($name) . '</a> › ' . h($city['name']) : h($name)) . '</p>'
         . '<h1>Emploi ' . h($lname) . h($where_) . ' : ' . $nf($n) . ' offres</h1>'
-        . '<p class="lead">' . $nf($n) . ' offres d\'emploi de ' . h($lname) . h($where_) . ' sont ouvertes aujourd\'hui'
+        . '<p class="lead">' . $nf($n) . ' offres d\'emploi ' . h(metier_de($lname)) . h($where_) . ' sont ouvertes aujourd\'hui'
         . ($sal ? ', pour un salaire médian proposé de <strong>' . metier_fmt_eur($sal['med']) . ' brut par mois</strong>' : '') . '. Mise à jour : ' . h(date_fr(now())) . '.</p>';
     $kpi = '<div class="kpi"><div><b>' . $nf($n) . '</b>offres ouvertes</div>';
     if ($sal) $kpi .= '<div><b>' . metier_fmt_eur($sal['med']) . '</b>salaire médian brut/mois</div><div><b>' . metier_fmt_eur($sal['p25']) . ' – ' . metier_fmt_eur($sal['p75']) . '</b>fourchette courante</div>';
@@ -139,15 +145,18 @@ function page_metier(array $site, string $mslug, string $cslug = ''): string
     }
     $emp = []; foreach ($all as $j) if ($j['company'] !== '' && !str_contains($j['company'], '—')) $emp[$j['company']] = ($emp[$j['company']] ?? 0) + 1; arsort($emp);
     if (count($emp) >= 3) $body .= '<h2>Employeurs qui recrutent</h2>' . count_chips(array_map(fn($k, $v) => [$k, $v, ''], array_slice(array_keys($emp), 0, 12), array_slice($emp, 0, 12)));
-    $body .= '<h2>Dernières offres de ' . h($lname) . h($where_) . '</h2><div class="grid">' . implode('', array_map('job_card', array_slice($all, 0, 30))) . '</div>';
-    $faq = [['Combien d\'offres d\'emploi de ' . $lname . $where_ . ' ?', $nf($n) . ' offres sont ouvertes aujourd\'hui sur ' . $site['name'] . ', mises à jour plusieurs fois par jour.']];
+    $st = $db->prepare('SELECT 1 FROM job_metier_sal WHERE slug=?'); $st->execute([$mslug]);
+    if ($st->fetchColumn()) $body .= '<p><a href="/salaire/' . h($mslug) . '/"><strong>Salaire ' . h($lname) . ' : détail par région et par contrat →</strong></a></p>';
+    $body .= '<h2>Dernières offres ' . h(metier_de($lname)) . h($where_) . '</h2><div class="grid">' . implode('', array_map('job_card', array_slice($all, 0, 30))) . '</div>';
+    if (!$city) $body .= metier_formations_html(metier_formations($db, $mslug, $name), $name);
+    $faq = [['Combien d\'offres d\'emploi ' . metier_de($lname) . $where_ . ' ?', $nf($n) . ' offres sont ouvertes aujourd\'hui sur ' . $site['name'] . ', mises à jour plusieurs fois par jour.']];
     if ($sal) $faq[] = ['Quel salaire pour un ' . $lname . $where_ . ' ?', 'Sur ' . $sal['n'] . ' offres indiquant un salaire, la rémunération médiane est de ' . metier_fmt_eur($sal['med']) . ' brut par mois ; la moitié des offres se situe entre ' . metier_fmt_eur($sal['p25']) . ' et ' . metier_fmt_eur($sal['p75']) . '.'];
     $faq[] = ['Quel contrat pour un ' . $lname . ' ?', 'Le contrat le plus proposé est le ' . array_key_first($contracts) . ' (' . round(100 * reset($contracts) / $n) . ' % des offres).'];
     $body .= '<h2>Questions fréquentes</h2>' . implode('', array_map(fn($q) => '<h3>' . h($q[0]) . '</h3><p>' . h($q[1]) . '</p>', $faq)) . jobs_disclaimer();
     $schema = [breadcrumbs($site, array_filter([['Métiers', '/emploi/'], [$name, '/emploi/' . $mslug . '/'], $city ? [$city['name'], '/emploi/' . $mslug . '/' . $cslug . '/'] : null])),
         ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => array_map(fn($q) => ['@type' => 'Question', 'name' => $q[0], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $q[1]]], $faq)]];
     return layout($site, ['title' => 'Emploi ' . $lname . $where_ . ' : ' . $nf($n) . ' offres' . ($sal ? ', salaire ' . metier_fmt_eur($sal['med']) : '') . ' | ' . $site['name'],
-        'desc' => $nf($n) . ' offres d\'emploi de ' . $lname . $where_ . ($sal ? ', salaire médian ' . metier_fmt_eur($sal['med']) . ' brut/mois' : '') . '. CDI, CDD, intérim : postulez directement. Mis à jour aujourd\'hui.',
+        'desc' => $nf($n) . ' offres d\'emploi ' . metier_de($lname) . $where_ . ($sal ? ', salaire médian ' . metier_fmt_eur($sal['med']) . ' brut/mois' : '') . '. CDI, CDD, intérim : postulez directement. Mis à jour aujourd\'hui.',
         'canonical' => 'https://' . $site['host'] . '/emploi/' . $mslug . '/' . ($city ? $cslug . '/' : ''), 'schema' => $schema],
         '<style>' . fr_map_css() . '</style>' . $body);
 }
@@ -160,6 +169,8 @@ function out_sitemap_metiers(array $site): void
     echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
     echo "<url><loc>$b/emploi/</loc><lastmod>$d</lastmod></url>";
     foreach ($db->query('SELECT slug FROM job_metiers') as $r) echo "<url><loc>$b/emploi/{$r['slug']}/</loc><lastmod>$d</lastmod></url>";
+    echo "<url><loc>$b/salaire/</loc><lastmod>$d</lastmod></url>";
+    foreach ($db->query('SELECT slug FROM job_metier_sal') as $r) echo "<url><loc>$b/salaire/{$r['slug']}/</loc><lastmod>$d</lastmod></url>";
     foreach ($db->query('SELECT mslug, cslug FROM job_metier_cities LIMIT 45000') as $r) echo "<url><loc>$b/emploi/{$r['mslug']}/{$r['cslug']}/</loc><lastmod>$d</lastmod></url>";
     echo '</urlset>';
 }
@@ -171,9 +182,97 @@ function out_sitemap_priority(array $site): void
     header('Content-Type: application/xml; charset=utf-8');
     header('X-Robots-Tag: noindex');
     $db = jobs_db($site['host']);
-    $rows = $db->query("SELECT slug FROM jobs WHERE status='open' AND created_at >= datetime('now','-10 days')
+    $rows = $db->query("SELECT slug FROM jobs WHERE status='open' AND " . JOB_INDEXABLE_SQL . " AND created_at >= datetime('now','-10 days')
         ORDER BY CASE WHEN id LIKE 'csp-%' THEN 0 WHEN id LIKE 'lba-%' THEN 1 WHEN salary<>'' AND length(description)>600 THEN 2 ELSE 3 END, created_at DESC LIMIT 3000")->fetchAll(PDO::FETCH_COLUMN);
     echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
     foreach ($rows as $s) echo '<url><loc>https://' . $site['host'] . '/offre/' . $s . '/</loc></url>';
     echo '</urlset>';
 }
+
+// Formations en apprentissage liées à un métier : codes ROME des offres d'alternance du métier, sinon intitulé.
+function metier_formations(PDO $db, string $mslug, string $name, int $limit = 8): array
+{
+    if (!function_exists('lba_tables')) return [];
+    lba_tables($db);
+    $st = $db->prepare("SELECT m.romes FROM lba_job_meta m JOIN job_metier_map mm ON mm.id=m.id WHERE mm.mslug=? AND m.romes<>''"); $st->execute([$mslug]);
+    $cnt = [];
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $r) foreach (explode(',', $r) as $c) if ($c !== '') $cnt[$c] = ($cnt[$c] ?? 0) + 1;
+    arsort($cnt);
+    $romes = array_slice(array_keys($cnt), 0, 3);
+    if ($romes) {
+        $like = implode(' OR ', array_fill(0, count($romes), 'romes LIKE ?'));
+        $st = $db->prepare("SELECT title, sigle, MIN(niveau) niveau, MIN(url) url, COUNT(DISTINCT organisme) n FROM lba_formations WHERE $like GROUP BY title ORDER BY n DESC LIMIT $limit");
+        $st->execute(array_map(fn($r) => "%$r%", $romes));
+        if ($rows = $st->fetchAll()) return $rows;
+    }
+    $st = $db->prepare("SELECT title, sigle, MIN(niveau) niveau, MIN(url) url, COUNT(DISTINCT organisme) n FROM lba_formations WHERE title LIKE ? GROUP BY title ORDER BY n DESC LIMIT $limit");
+    $st->execute(['%' . mb_strtolower($name) . '%']);
+    return $st->fetchAll();
+}
+
+function metier_formations_html(array $rows, string $name): string
+{
+    if (!$rows) return '';
+    $li = implode('', array_map(fn($f) => '<li>' . ($f['url'] ? '<a href="' . h($f['url']) . '" rel="nofollow noopener" target="_blank">' . h(mb_strtoupper(mb_substr($f['title'], 0, 1)) . mb_substr($f['title'], 1)) . '</a>' : h($f['title']))
+        . ' <small>' . h(trim($f['sigle'] . ' · ' . (int)$f['n'] . ' établissement' . ($f['n'] > 1 ? 's' : '') . ' en France', ' ·')) . '</small></li>', $rows));
+    return '<h2>Se former au métier ' . h(metier_de(mb_strtolower($name))) . ' en alternance</h2><ul>' . $li . '</ul><p class="disc">Formations en apprentissage du catalogue national (Carif-Oref, ONISEP), via La bonne alternance.</p>';
+}
+
+// Pages salaire : /salaire/ et /salaire/<métier>/ (métiers avec au moins 8 offres indiquant un salaire).
+function metier_jobs(PDO $db, string $mslug): array
+{
+    $st = $db->prepare("SELECT j.* FROM jobs j JOIN job_metier_map mm ON mm.id=j.id WHERE j.status='open' AND mm.mslug=?"); $st->execute([$mslug]);
+    return $st->fetchAll();
+}
+
+function page_salaires_index(array $site): string
+{
+    $db = jobs_db($site['host']); metier_tables($db);
+    $rows = array_map(fn($r) => [$r, $r], $db->query('SELECT m.slug, m.name, s.n, s.med, s.p25, s.p75 FROM job_metier_sal s JOIN job_metiers m ON m.slug=s.slug ORDER BY s.med DESC')->fetchAll());
+    if (!$rows) return '';
+    $tr = implode('', array_map(fn($r) => '<tr><td><a href="/salaire/' . h($r[0]['slug']) . '/">' . h($r[0]['name']) . '</a></td><td>' . metier_fmt_eur($r[1]['med']) . '</td><td>' . metier_fmt_eur($r[1]['p25']) . ' – ' . metier_fmt_eur($r[1]['p75']) . '</td><td>' . (int)$r[1]['n'] . '</td></tr>', $rows));
+    $body = '<h1 style="margin-top:28px">Salaires par métier</h1><p>Salaires bruts mensuels proposés dans les offres d\'emploi ouvertes aujourd\'hui, pour ' . count($rows) . ' métiers. Médiane et fourchette courante (la moitié des offres), calculées sur les offres qui indiquent une rémunération.</p>'
+        . '<div style="overflow-x:auto"><table><tr><th>Métier</th><th>Salaire médian</th><th>Fourchette courante</th><th>Offres avec salaire</th></tr>' . $tr . '</table></div>' . jobs_disclaimer();
+    return layout($site, ['title' => 'Salaires par métier : ' . count($rows) . ' métiers, salaires réels des offres | ' . $site['name'],
+        'desc' => 'Combien gagne un aide-soignant, un cariste, un comptable ? Salaires bruts mensuels de ' . count($rows) . ' métiers, calculés sur les offres d\'emploi du jour.',
+        'canonical' => 'https://' . $site['host'] . '/salaire/', 'schema' => [breadcrumbs($site, [['Salaires', '/salaire/']])]], $body);
+}
+
+function page_salaire(array $site, string $mslug): string
+{
+    $db = jobs_db($site['host']); metier_tables($db);
+    $st = $db->prepare('SELECT * FROM job_metiers WHERE slug=?'); $st->execute([$mslug]);
+    if (!($m = $st->fetch())) return '';
+    $all = metier_jobs($db, $mslug);
+    $sal = metier_salary_stats($all);
+    if (!$sal || $sal['n'] < 8) return '';
+    $name = $m['name']; $l = mb_strtolower($name);
+    $byR = []; $byC = [];
+    foreach ($all as $j) { $byR[$j['region']][] = $j; $byC[JOB_CONTRACTS[$j['contract']] ?? 'Autre'][] = $j; }
+    $rowsR = '';
+    foreach (JOB_REGIONS as $code => [$slug, $rn]) if (!empty($byR[$code]) && ($s = metier_salary_stats($byR[$code]))) $rowsR .= '<tr><td><a href="/offres-emploi/' . $slug . '/">' . h($rn) . '</a></td><td>' . metier_fmt_eur($s['med']) . '</td><td>' . metier_fmt_eur($s['p25']) . ' – ' . metier_fmt_eur($s['p75']) . '</td><td>' . (int)$s['n'] . '</td></tr>';
+    $rowsC = '';
+    foreach ($byC as $c => $js) if ($s = metier_salary_stats($js)) $rowsC .= '<tr><td>' . h($c) . '</td><td>' . metier_fmt_eur($s['med']) . '</td><td>' . (int)$s['n'] . '</td></tr>';
+    $year = metier_fmt_eur($sal['med'] * 12);
+    $net = metier_fmt_eur($sal['med'] * 0.78);
+    $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/salaire/">Salaires</a> › ' . h($name) . '</p>'
+        . '<h1>Salaire ' . h($l) . ' : ' . metier_fmt_eur($sal['med']) . ' brut par mois</h1>'
+        . '<p class="lead">D\'après ' . (int)$sal['n'] . ' offres d\'emploi ouvertes aujourd\'hui qui indiquent une rémunération, un ' . h($l) . ' est payé en médiane <strong>' . metier_fmt_eur($sal['med']) . ' brut par mois</strong> (environ ' . $net . ' net), soit ' . $year . ' brut par an. La moitié des offres se situe entre ' . metier_fmt_eur($sal['p25']) . ' et ' . metier_fmt_eur($sal['p75']) . '.</p>'
+        . '<div class="kpi"><div><b>' . metier_fmt_eur($sal['med']) . '</b>médiane brute/mois</div><div><b>' . $net . '</b>net estimé/mois</div><div><b>' . metier_fmt_eur($sal['p25']) . '</b>bas de fourchette</div><div><b>' . metier_fmt_eur($sal['p75']) . '</b>haut de fourchette</div></div>'
+        . ($rowsR ? '<h2>Salaire ' . h($l) . ' par région</h2><div style="overflow-x:auto"><table><tr><th>Région</th><th>Médiane brute</th><th>Fourchette</th><th>Offres</th></tr>' . $rowsR . '</table></div>' : '')
+        . ($rowsC ? '<h2>Selon le type de contrat</h2><table><tr><th>Contrat</th><th>Médiane brute</th><th>Offres</th></tr>' . $rowsC . '</table>' : '')
+        . '<p><a class="btn" style="background:var(--c);color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none" href="/emploi/' . h($mslug) . '/">Voir les ' . count($all) . ' offres ' . h(metier_de($l)) . '</a></p>'
+        . metier_formations_html(metier_formations($db, $mslug, $name), $name)
+        . '<h2>Questions fréquentes</h2>';
+    $faq = [['Quel est le salaire d\'un ' . $l . ' ?', 'Le salaire médian proposé est de ' . metier_fmt_eur($sal['med']) . ' brut par mois (environ ' . $net . ' net), d\'après ' . $sal['n'] . ' offres d\'emploi actuelles.'],
+        ['Combien gagne un ' . $l . ' par an ?', 'Environ ' . $year . ' brut par an sur la base du salaire médian, hors primes et 13e mois.'],
+        ['Quelle fourchette de salaire pour un ' . $l . ' ?', 'La moitié des offres propose entre ' . metier_fmt_eur($sal['p25']) . ' et ' . metier_fmt_eur($sal['p75']) . ' brut par mois.']];
+    $body .= implode('', array_map(fn($q) => '<h3>' . h($q[0]) . '</h3><p>' . h($q[1]) . '</p>', $faq)) . '<p class="disc">Salaires bruts mensuels annoncés dans les offres (hors primes), convertis en équivalent mensuel temps plein ; net estimé à 78 % du brut. ' . 'Mise à jour : ' . date_fr(now()) . '.</p>';
+    return layout($site, ['title' => 'Salaire ' . $l . ' : ' . metier_fmt_eur($sal['med']) . ' brut/mois en ' . date('Y') . ' | ' . $site['name'],
+        'desc' => 'Salaire ' . $l . ' : ' . metier_fmt_eur($sal['med']) . ' brut par mois en médiane (' . $net . ' net), fourchette ' . metier_fmt_eur($sal['p25']) . ' – ' . metier_fmt_eur($sal['p75']) . ', par région. Calculé sur ' . $sal['n'] . ' offres réelles.',
+        'canonical' => 'https://' . $site['host'] . '/salaire/' . $mslug . '/',
+        'schema' => [breadcrumbs($site, [['Salaires', '/salaire/'], [$name, '/salaire/' . $mslug . '/']]),
+            ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => array_map(fn($q) => ['@type' => 'Question', 'name' => $q[0], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $q[1]]], $faq)]]], $body);
+}
+
+function metier_de(string $w): string { return (preg_match('/^[aeiouyhéèêëàâîïôöûü]/iu', $w) ? "d'" : 'de ') . $w; }
