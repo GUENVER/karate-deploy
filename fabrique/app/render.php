@@ -24,7 +24,7 @@ form.q{margin-left:auto}form.q input{border:1px solid var(--b);border-radius:20p
 .card .in{padding:14px 18px 18px}.card h2,.card h3{font-size:1.1rem;line-height:1.35;margin:.3em 0}.card h2 a,.card h3 a{color:var(--t);text-decoration:none}
 .card p{color:var(--m);font-size:.92rem;margin:.4em 0 0}.kick{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--c);font-weight:700;text-decoration:none}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:48px;margin:30px auto}
-@media(max-width:900px){.layout{grid-template-columns:1fr}aside{order:2}}
+@media(max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}aside{order:2}}
 article h1{font-size:2.1rem;line-height:1.2;margin:.2em 0 .4em}article h2{font-size:1.5rem;line-height:1.3;margin:1.8em 0 .5em}article h3{font-size:1.2rem;margin:1.4em 0 .4em}
 .meta{color:var(--m);font-size:.88rem}.crumbs{font-size:.85rem;color:var(--m)}.crumbs a{color:var(--m)}
 .hero{border-radius:12px;margin:18px 0;aspect-ratio:16/9;object-fit:cover;width:100%}.credit{font-size:.75rem;color:var(--m);margin-top:-12px}
@@ -50,6 +50,7 @@ header.hl .hlw{justify-content:center;padding:10px 16px 8px}.hlogo img{height:70
 .hnav nav.cats a{white-space:nowrap;padding:5px 11px;border-radius:8px;color:var(--t);font-weight:500}.hnav nav.cats a:hover,.hnav nav.cats a[aria-current]{background:#fff;color:var(--c);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .hnav form.q{margin-left:0}.hnav form.q input{width:180px;background:#fff}
 @media(max-width:700px){.hlogo img{height:50px}.hnav .w{flex-wrap:wrap;gap:8px}.hnav form.q{flex:1 1 100%;order:3}.hnav form.q input{width:100%}.hnav nav.cats{flex:1 1 100%;order:2;-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent);padding-right:30px}}
+pre{white-space:pre-wrap;word-break:break-word;overflow-x:auto;max-width:100%;background:var(--s);padding:12px;border-radius:8px;font-size:.85rem}main,article{min-width:0;overflow-wrap:break-word}main iframe,main video{max-width:100%}.layout>*{min-width:0}
 footer.bot{border-top:1px solid var(--b);margin-top:50px;padding:26px 0;color:var(--m);font-size:.88rem;background:var(--s)}footer.bot a{color:var(--m);margin-right:14px}";
 }
 
@@ -86,7 +87,7 @@ function layout(array $site, array $m, string $body): string
         . (($lg = setting('logo:' . $site['host'], ''))
             ? '<header class="top hl"><div class="w hlw"><a class="hlogo" href="/" aria-label="' . h($site['name']) . ' — accueil"><img src="' . h($lg) . '" alt="' . h($site['name']) . '" width="288" height="70" fetchpriority="high"></a></div>'
               . '<div class="hnav"><div class="w">' . $navJobs . '<nav class="cats" aria-label="Rubriques">' . $nav . '</nav>'
-              . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></div></header>'
+              . '<form class="q" action="' . (!empty($site['jobs']) ? '/chercher/' : '/recherche/') . '" method="get"><input type="search" name="q" placeholder="' . (!empty($site['jobs']) ? 'Métier, mot-clé…' : 'Rechercher…') . '" aria-label="Rechercher"></form></div></div></header>'
             : '<header class="top"><div class="w"><a class="logo" href="/">' . $logo . '</a><nav class="cats">' . $navJobs . $nav . '</nav>'
               . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></header>')
         . '<main class="w">' . $body . '</main>'
@@ -120,7 +121,8 @@ function jobs_home_regions(array $site): string
     $nf = fn($n) => number_format($n, 0, ',', ' ');
     $total = array_sum($counts);
     $o = '<section class="jhome" style="margin:22px 0 30px"><h1 style="margin:0 0 6px">' . $nf($total) . ' offres d\'emploi en France</h1>'
-        . '<p style="margin:0 0 6px">CDI, CDD, intérim, alternance et emploi public, dans toutes les régions. Mis à jour le ' . h(date_fr(now())) . '.</p>';
+        . '<p style="margin:0 0 6px">CDI, CDD, intérim, alternance et emploi public, dans toutes les régions. Mis à jour le ' . h(date_fr(now())) . '.</p>'
+        . '<form action="/chercher/" method="get" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px"><input name="q" placeholder="Métier, mot-clé, entreprise" aria-label="Métier" style="flex:2 1 220px;padding:11px;border:1px solid var(--b);border-radius:8px;font-size:1rem"><input name="l" placeholder="Ville, département ou région" aria-label="Lieu" style="flex:1 1 160px;padding:11px;border:1px solid var(--b);border-radius:8px;font-size:1rem"><button style="background:var(--c);color:#fff;border:0;border-radius:8px;padding:11px 20px;font-weight:700;font-size:1rem">Rechercher</button></form>';
     if (function_exists('fr_map')) $o .= '<style>' . fr_map_css() . '</style><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><div style="flex:1 1 380px">' . fr_map($counts, '/offres-emploi/') . '</div><div style="flex:1 1 300px">';
     $l = '';
     foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $l .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . ' <small>(' . $nf($counts[$code]) . ')</small></a>';
