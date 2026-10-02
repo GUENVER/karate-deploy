@@ -8,6 +8,7 @@ require dirname(__DIR__) . '/app/feeds.php';
 require dirname(__DIR__) . '/app/jobs.php';
 require dirname(__DIR__) . '/app/careerjet.php';
 require dirname(__DIR__) . '/app/lba_blocks.php';
+require dirname(__DIR__) . '/app/csp.php';
 require dirname(__DIR__) . '/app/fuel.php';
 require dirname(__DIR__) . '/app/ev.php';
 require dirname(__DIR__) . '/app/places.php';
@@ -126,6 +127,9 @@ function route(array $site, string $path): ?string
             $c = (string)($_GET['contrat'] ?? '');
             return page_jobs_region($site, $reg, max(1, (int)($m[2] ?? 1)), isset(JOB_CONTRACTS[$c]) ? $c : '');
         }
+        if ($path === '/emploi-public/') return page_emploi_public($site);
+        if (preg_match('#^/emploi-public/versant/(etat|territoriale|hospitaliere)/(?:page/(\d+)/)?$#', $path, $m)) return page_emploi_public_list($site, null, $m[1], max(1, (int)($m[2] ?? 1)));
+        if (preg_match('#^/emploi-public/([a-z\-]+)/(?:page/(\d+)/)?$#', $path, $m) && ($reg = region_by_slug($m[1]))) return page_emploi_public_list($site, $reg, '', max(1, (int)($m[2] ?? 1)));
         if (preg_match('#^/offre/([a-z0-9\-]+)/$#', $path, $m)) return page_job($site, $m[1]);
     }
 
