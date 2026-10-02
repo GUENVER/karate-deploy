@@ -327,7 +327,11 @@ function page_jobs_home(array $site): string
     $topCities = $db->query('SELECT slug, name, n FROM job_cities ORDER BY n DESC LIMIT 40')->fetchAll();
     $latest = $db->query("SELECT * FROM jobs WHERE status='open' ORDER BY created_at DESC LIMIT 12")->fetchAll();
     $body = '<h1 style="margin-top:28px">Offres d\'emploi par région</h1><p>' . number_format($total, 0, ',', ' ') . ' offres d\'emploi actualisées plusieurs fois par jour : CDI, CDD, intérim, alternance et stages dans toutes les régions de France.</p>'
-        . '<div class="grid">' . $regs . '</div>'
+        . (function_exists('fr_map') ? '<style>' . fr_map_css() . '</style>' . fr_map($counts, '/offres-emploi/') : '')
+        . '<h2>Offres par type de contrat</h2>' . count_chips(array_map(fn($r) => [JOB_CONTRACTS[$r['contract']] ?? ucfirst((string)$r['contract']), $r['n'], ''], $db->query("SELECT contract, COUNT(*) n FROM jobs WHERE status='open' AND contract<>'' GROUP BY contract ORDER BY n DESC")->fetchAll()))
+        . '<h2>Offres par secteur d\'activité</h2>' . count_chips(array_map(fn($r) => [$r['sector'], $r['n'], ''], $db->query("SELECT sector, COUNT(*) n FROM jobs WHERE status='open' AND sector<>'' GROUP BY sector ORDER BY n DESC LIMIT 20")->fetchAll()))
+        . (function_exists('csp_tables') && ($np = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn()) ? '<p><a href="/emploi-public/"><strong>Emploi public : ' . number_format($np, 0, ',', ' ') . ' offres de la fonction publique →</strong></a></p>' : '')
+        . '<h2>Offres d\'emploi par région</h2><div class="grid">' . $regs . '</div>'
         . ($topCities ? '<h2>Villes qui recrutent le plus</h2><p>' . city_links($topCities) . '.</p>' : '')
         . '<h2>Dernières offres publiées</h2><div class="grid">' . implode('', array_map('job_card', $latest)) . '</div>' . jobs_disclaimer();
     return layout($site, ['title' => 'Offres d\'emploi par région | ' . $site['name'], 'desc' => "$total offres d'emploi en France par région : CDI, CDD, intérim, alternance. Mises à jour quotidiennes.", 'canonical' => 'https://' . $site['host'] . '/offres-emploi/'], $body);
@@ -544,6 +548,14 @@ function page_job(array $site, string $slug): ?string
             'employmentType' => $types[$j['contract']] ?? 'OTHER', 'hiringOrganization' => ['@type' => 'Organization', 'name' => $j['company'] ?: 'Entreprise non communiquée'],
             'jobLocation' => ['@type' => 'Place', 'address' => ['@type' => 'PostalAddress', 'addressLocality' => $j['city'], 'postalCode' => $j['postal'], 'addressRegion' => $reg[1], 'addressCountry' => 'FR']],
             'identifier' => ['@type' => 'PropertyValue', 'name' => $j['src'], 'value' => $j['id']], 'directApply' => false];
+        if (str_starts_with((string)$j['id'], 'csp-') && function_exists('csp_tables')) { // emploi public : employeur, département et date limite réels
+            csp_tables($db); $cm = $db->prepare('SELECT employeur, dep_name, deadline FROM csp_meta WHERE id=?'); $cm->execute([$j['id']]);
+            if ($cm = $cm->fetch()) {
+                if ($cm['employeur']) $posting['hiringOrganization']['name'] = $cm['employeur'];
+                $posting['jobLocation']['address'] = ['@type' => 'PostalAddress', 'addressLocality' => $cm['dep_name'] ?: $reg[1], 'addressRegion' => $reg[1], 'addressCountry' => 'FR'];
+                if ($cm['deadline']) $posting['validThrough'] = $cm['deadline'] . 'T23:59:00+02:00';
+            }
+        } elseif ($j['city'] === '') unset($posting['jobLocation']['address']['addressLocality']);
         if ($sal = job_salary((string)$j['salary'])) {
             $posting['baseSalary'] = ['@type' => 'MonetaryAmount', 'currency' => 'EUR', 'value' => ['@type' => 'QuantitativeValue', 'unitText' => $sal['unit']]
                 + ($sal['min'] == $sal['max'] ? ['value' => $sal['min']] : ['minValue' => $sal['min'], 'maxValue' => $sal['max']])];
