@@ -47,11 +47,21 @@ function csp_list_page(int $n): ?array
 
 function csp_text(string $html): string
 {
-    $html = preg_replace('#<(script|style)\b.*?</\1>#si', '', $html);
-    $html = preg_replace('#<br\s*/?>|</(p|div|li|h\d|dt|dd|tr)>#i', "\n", $html);
+    // découpe sans regex sur les blocs script/style (pages de plusieurs Mo : évite les limites PCRE)
+    foreach (['script', 'style'] as $tag) {
+        $out = ''; $pos = 0;
+        while (($i = stripos($html, '<' . $tag, $pos)) !== false) {
+            $out .= substr($html, $pos, $i - $pos);
+            $j = stripos($html, '</' . $tag . '>', $i);
+            if ($j === false) { $pos = strlen($html); break; }
+            $pos = $j + strlen($tag) + 3;
+        }
+        $html = $out . substr($html, $pos);
+    }
+    $html = (string)preg_replace('#<br\s*/?>|</(p|div|li|h\d|dt|dd|tr)>#i', "\n", $html);
     $t = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $t = preg_replace("/[ \t\x{00A0}]+/u", ' ', $t);
-    return trim(preg_replace("/\n\s*\n+/", "\n", $t));
+    $t = (string)(preg_replace("/[ \t\x{00A0}]+/u", ' ', $t) ?? str_replace("\t", ' ', $t));
+    return trim((string)preg_replace("/\n\s*\n+/", "\n", $t));
 }
 
 // Analyse une page d'offre → [job, meta] ou null.
