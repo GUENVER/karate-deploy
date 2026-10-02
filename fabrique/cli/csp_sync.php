@@ -62,24 +62,37 @@ foreach ($sites as $s) {
         $db->prepare('INSERT OR REPLACE INTO csp_meta(id,ref,versant,categorie,domaine,employeur,dep,dep_name,deadline,metier,statut,fetched) VALUES(:id,:ref,:versant,:categorie,:domaine,:employeur,:dep,:dep_name,:deadline,:metier,:statut,:fetched)')];
 }
 $done = 0; $bad = 0; $urls = [];
-$q = $main->prepare("SELECT ref, url FROM csp_queue WHERE status='todo' AND tries<3 ORDER BY found DESC, ref DESC LIMIT 500");
+$q = $main->prepare("SELECT ref, url FROM csp_queue WHERE status='todo' AND tries<3 ORDER BY found DESC, ref DESC LIMIT 400");
 $mark = $main->prepare('UPDATE csp_queue SET status=?, tries=tries+1 WHERE ref=?');
+$par = 4; // requêtes simultanées
 while (time() - $t0 < $budget) {
     $q->execute(); $batch = $q->fetchAll();
     if (!$batch) break;
-    foreach ($batch as $b) {
+    foreach (array_chunk($batch, $par) as $group) {
         if (time() - $t0 >= $budget) break 2;
-        [$code, $html] = csp_get($b['url']);
-        $r = $code === 200 ? csp_parse($html, $b['ref'], $b['url']) : null;
-        if (!$r) { $mark->execute([$code === 404 ? 'gone' : 'todo', $b['ref']]); $bad++; usleep(800000); continue; }
-        [$job, $meta] = $r;
-        $job['slug'] = slugify($job['title'] . ' ' . $meta['dep_name'], 70) . '-' . substr(md5($job['id']), 0, 6);
-        $job['seen'] = now();
-        foreach ($ups as [$db, $up, $mt]) { $up->execute($job); $mt->execute($meta); }
-        $mark->execute(['done', $b['ref']]);
-        $urls[] = $job['slug'];
-        $done++;
-        usleep(800000);
+        $mh = curl_multi_init(); $hs = [];
+        foreach ($group as $b) {
+            $ch = curl_init($b['url']);
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 40, CURLOPT_ENCODING => '', CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; recruteur.eu/1.0; +https://www.recruteur.eu/a-propos/)']);
+            curl_multi_add_handle($mh, $ch); $hs[] = [$ch, $b];
+        }
+        do { $st = curl_multi_exec($mh, $run); if ($run) curl_multi_select($mh, 1.0); } while ($run && $st === CURLM_OK);
+        foreach ($hs as [$ch, $b]) {
+            $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE); $html = (string)curl_multi_getcontent($ch);
+            curl_multi_remove_handle($mh, $ch); curl_close($ch);
+            try { $r = $code === 200 ? csp_parse($html, $b['ref'], $b['url']) : null; } catch (Throwable $e) { $r = null; fwrite(STDERR, "{$b['ref']} : " . $e->getMessage() . "\n"); }
+            if (!$r) { $mark->execute([$code === 404 || $code === 410 ? 'gone' : 'todo', $b['ref']]); $bad++; continue; }
+            [$job, $meta] = $r;
+            $job['slug'] = slugify($job['title'] . ' ' . $meta['dep_name'], 70) . '-' . substr(md5($job['id']), 0, 6);
+            $job['seen'] = now();
+            foreach ($ups as [$db, $up, $mt]) { $up->execute($job); $mt->execute($meta); }
+            $mark->execute(['done', $b['ref']]);
+            $urls[] = $job['slug'];
+            $done++;
+        }
+        curl_multi_close($mh);
+        usleep(600000);
     }
 }
 $say("$done offres importées, $bad en échec");
