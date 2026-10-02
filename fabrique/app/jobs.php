@@ -13,6 +13,9 @@ const JOB_REGIONS = [
     '04' => ['la-reunion', 'La Réunion'], '06' => ['mayotte', 'Mayotte'],
 ];
 const JOB_CONTRACTS = ['cdi' => 'CDI', 'cdd' => 'CDD', 'interim' => 'Intérim', 'alternance' => 'Alternance', 'stage' => 'Stage', 'freelance' => 'Indépendant', 'autre' => 'Autre'];
+// Fiches pauvres (extrait Adzuna, description très courte) : affichées mais exclues de l'index et des sitemaps.
+const JOB_INDEXABLE_SQL = "id NOT LIKE 'az-%' AND length(description) >= 300";
+function job_is_thin(array $j): bool { return str_starts_with((string)$j['id'], 'az-') || mb_strlen((string)$j['description']) < 300; }
 const JOB_CITY_MIN = 20; // nombre minimal d'offres ouvertes pour qu'une ville ait sa page
 
 function jobs_db(string $host): PDO
@@ -564,14 +567,14 @@ function page_job(array $site, string $slug): ?string
     }
     return layout($site, [
         'title' => mb_substr($j['title'], 0, 50) . ' — ' . $j['city'] . ' | ' . $site['name'], 'desc' => mb_strimwidth(trim(($j['company'] ? $j['company'] . ' recrute : ' : 'Offre : ') . $j['title'] . ' à ' . $j['city'] . '. ' . preg_replace('/\s+/', ' ', $desc)), 0, 155, '…'),
-        'canonical' => 'https://' . $site['host'] . job_url($j), 'robots' => $closed ? 'noindex,follow' : null, 'schema' => $schema,
+        'canonical' => 'https://' . $site['host'] . job_url($j), 'robots' => ($closed || job_is_thin($j)) ? 'noindex,follow' : null, 'schema' => $schema,
     ], $body);
 }
 
 function out_sitemap_jobs(array $site, int $i): void
 {
     $db = jobs_db($site['host']);
-    $st = $db->prepare("SELECT slug, created_at FROM jobs WHERE status='open' ORDER BY created_at DESC LIMIT 1000 OFFSET ?");
+    $st = $db->prepare("SELECT slug, created_at FROM jobs WHERE status='open' AND " . JOB_INDEXABLE_SQL . " ORDER BY created_at DESC LIMIT 1000 OFFSET ?");
     $st->execute([($i - 1) * 1000]);
     header('Content-Type: application/xml; charset=utf-8');
     echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
@@ -593,5 +596,5 @@ function out_sitemap_jobs(array $site, int $i): void
 
 function jobs_sitemap_count(array $site): int
 {
-    return (int)ceil(max(1, (int)jobs_db($site['host'])->query("SELECT COUNT(*) FROM jobs WHERE status='open'")->fetchColumn()) / 1000);
+    return (int)ceil(max(1, (int)jobs_db($site['host'])->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND " . JOB_INDEXABLE_SQL)->fetchColumn()) / 1000);
 }
