@@ -73,6 +73,7 @@ if ($path === '/_pv') {
 }
 
 if (!empty($site['commune']) && $path === '/commune/recherche/') { echo page_commune_search($site, (string)($_GET['q'] ?? '')); exit; } // jamais en cache
+if (!empty($site['jobs']) && $path === '/chercher/') { echo page_job_search($site, (string)($_GET['q'] ?? ''), (string)($_GET['l'] ?? '')); exit; } // jamais en cache
 if ($path === '/recherche/' || $path === '/recherche') { echo page_search($site, (string)($_GET['q'] ?? '')); exit; }
 
 // Cache HTML (vidé à chaque publication).
@@ -146,6 +147,8 @@ function route(array $site, string $path): ?string
         if (preg_match('#^/salaire/([a-z0-9\-]+)/$#', $path, $m)) return page_salaire($site, $m[1]);
         if (preg_match('#^/emploi/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m)) return page_metier($site, $m[1], $m[2] ?? '');
         if ($path === '/emploi-public/') return page_emploi_public($site);
+        if (preg_match('#^/emploi-public/type/([a-z\-]+)/(?:(?!page/)([a-z0-9\-]+)/)?(?:page/(\d+)/)?$#', $path, $m)) return page_csp_type($site, $m[1], $m[2] ?? '', max(1, (int)($m[3] ?? 1)));
+        if (preg_match('#^/emploi-public/departement/([a-z0-9\-]+)/(?:page/(\d+)/)?$#', $path, $m)) return page_csp_type($site, '', $m[1], max(1, (int)($m[2] ?? 1)));
         if (preg_match('#^/emploi-public/versant/(etat|territoriale|hospitaliere)/(?:page/(\d+)/)?$#', $path, $m)) return page_emploi_public_list($site, null, $m[1], max(1, (int)($m[2] ?? 1)));
         if (preg_match('#^/emploi-public/([a-z\-]+)/(?:page/(\d+)/)?$#', $path, $m) && ($reg = region_by_slug($m[1]))) return page_emploi_public_list($site, $reg, '', max(1, (int)($m[2] ?? 1)));
         if (preg_match('#^/offre/([a-z0-9\-]+)/$#', $path, $m)) return page_job($site, $m[1]);
