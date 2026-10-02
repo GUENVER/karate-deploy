@@ -2,6 +2,10 @@
 // Contrôleur frontal unique : tous les sites de la fabrique passent ici (sélection par nom d'hôte).
 declare(strict_types=1);
 
+// Robots sans intérêt qui exécutent le JavaScript (pages vues et impressions publicitaires fictives, risque AdSense) :
+// robot d'entraînement IA de Meta et signature du botnet de septembre. Les robots de recherche restent autorisés.
+if (preg_match('#meta-externalagent|Chrome/133\.0\.6943\.141 Safari/537\.36$#i', (string)($_SERVER['HTTP_USER_AGENT'] ?? ''))) { http_response_code(403); header('Content-Type: text/plain'); exit('Forbidden'); }
+
 require dirname(__DIR__) . '/app/core.php';
 require dirname(__DIR__) . '/app/render.php';
 require dirname(__DIR__) . '/app/feeds.php';
@@ -133,6 +137,8 @@ function route(array $site, string $path): ?string
             return page_jobs_region($site, $reg, max(1, (int)($m[2] ?? 1)), isset(JOB_CONTRACTS[$c]) ? $c : '');
         }
         if ($path === '/emploi/') return page_metiers_index($site);
+        if ($path === '/salaire/') return page_salaires_index($site);
+        if (preg_match('#^/salaire/([a-z0-9\-]+)/$#', $path, $m)) return page_salaire($site, $m[1]);
         if (preg_match('#^/emploi/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m)) return page_metier($site, $m[1], $m[2] ?? '');
         if ($path === '/emploi-public/') return page_emploi_public($site);
         if (preg_match('#^/emploi-public/versant/(etat|territoriale|hospitaliere)/(?:page/(\d+)/)?$#', $path, $m)) return page_emploi_public_list($site, null, $m[1], max(1, (int)($m[2] ?? 1)));
