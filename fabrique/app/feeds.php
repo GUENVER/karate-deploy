@@ -5,7 +5,7 @@ declare(strict_types=1);
 function out_robots(array $site): void
 {
     header('Content-Type: text/plain; charset=utf-8');
-    echo "User-agent: *\nDisallow: /_admin/\nDisallow: /_api/\nDisallow: /recherche/\nDisallow: /_cj\nAllow: /\n\nSitemap: https://{$site['host']}/sitemap.xml\n";
+    echo "User-agent: meta-externalagent\nDisallow: /\n\nUser-agent: *\nDisallow: /_admin/\nDisallow: /_api/\nDisallow: /recherche/\nDisallow: /_cj\nAllow: /\n\nSitemap: https://{$site['host']}/sitemap.xml\n";
 }
 
 function out_ads_txt(): void
