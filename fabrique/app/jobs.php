@@ -446,6 +446,7 @@ function page_jobs_city(array $site, string $slug): string
         . '<p><a href="/offres-emploi/' . h($reg[0]) . '/">Toutes les offres d\'emploi en ' . h($reg[1]) . '</a></p>'
         . '<h2>Questions fréquentes</h2>' . implode('', array_map(fn($f) => '<h3>' . h($f[0]) . '</h3><p>' . h($f[1]) . '</p>', $faq))
         . ($others ? '<h2>Autres villes qui recrutent en ' . h($reg[1]) . '</h2><p>' . city_links($others) . '.</p>' : '')
+        . (function_exists('lba_city_blocks') ? lba_city_blocks($site, $c) : '')
         . careerjet_slot($site, '', $name)
         . jobs_disclaimer();
     $schema = [breadcrumbs($site, [['Offres d\'emploi', '/offres-emploi/'], [$reg[1], '/offres-emploi/' . $reg[0] . '/'], ['Emploi ' . $name, $base]]),
@@ -531,7 +532,7 @@ function page_job(array $site, string $slug): ?string
         . ($closed ? '' : '<p><a class="btn" style="background:var(--c);color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:700" href="' . h($j['url']) . '" rel="' . $rel . '" target="_blank">Postuler sur le site de l\'offre</a></p>')
         . ($desc !== '' ? '<h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div>' : '')
         . '<p class="disc">Source : ' . h($j['src']) . ($j['src'] === 'Adzuna' ? ' — Jobs by Adzuna' : '') . '. Publiée le ' . h(date_fr($j['created_at'])) . '.</p>'
-        . ($closed ? '' : job_ad($site) . $simHtml . $cityHtml)
+        . ($closed ? '' : job_ad($site) . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
         . '</article><aside><div class="box"><h4>Préparer sa candidature</h4><ul>'
         . implode('', array_map(fn($g) => '<li><a href="' . h($g['path']) . '">' . h($g['title']) . '</a></li>', site_db($site['host'])->query("SELECT path,title FROM posts WHERE status='publish' ORDER BY published_at DESC LIMIT 8")->fetchAll()))
         . '</ul></div></aside></div>';
