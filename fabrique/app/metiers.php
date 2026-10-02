@@ -71,6 +71,7 @@ function metiers_build(PDO $db): array
     $is = $db->prepare('INSERT INTO job_metier_sal(slug,n,med,p25,p75) VALUES(?,?,?,?,?)');
     foreach (array_keys($keep) as $k) if (($s = metier_salary_stats(metier_jobs($db, (string)$k))) && $s['n'] >= 8) $is->execute([$k, $s['n'], $s['med'], $s['p25'], $s['p75']]);
     $db->commit();
+    intents_build($db);
     return ['metiers' => count($keep), 'combos' => (int)$db->query('SELECT COUNT(*) FROM job_metier_cities')->fetchColumn()];
 }
 
@@ -132,7 +133,8 @@ function page_metier(array $site, string $mslug, string $cslug = ''): string
     $kpi = '<div class="kpi"><div><b>' . $nf($n) . '</b>offres ouvertes</div>';
     if ($sal) $kpi .= '<div><b>' . metier_fmt_eur($sal['med']) . '</b>salaire médian brut/mois</div><div><b>' . metier_fmt_eur($sal['p25']) . ' – ' . metier_fmt_eur($sal['p75']) . '</b>fourchette courante</div>';
     $kpi .= '<div><b>' . h((string)array_key_first($contracts)) . '</b>contrat le plus proposé (' . round(100 * reset($contracts) / $n) . ' %)</div></div>';
-    $body .= $kpi . '<h2>Types de contrat</h2>' . count_chips(array_map(fn($k, $v) => [$k, $v, ''], array_keys($contracts), $contracts));
+    if (!$city) { $db->exec('CREATE TABLE IF NOT EXISTS job_metier_text(slug TEXT PRIMARY KEY, html TEXT, updated TEXT)'); $tx = $db->prepare('SELECT html FROM job_metier_text WHERE slug=?'); $tx->execute([$mslug]); $txt = (string)$tx->fetchColumn(); } else $txt = '';
+    $body .= $kpi . ($txt !== '' ? '<section class="mtext">' . $txt . '</section>' : '') . '<h2>Types de contrat</h2>' . count_chips(array_map(fn($k, $v) => [$k, $v, ''], array_keys($contracts), $contracts));
     if (!$city) {
         $byR = []; foreach ($all as $j) $byR[$j['region']] = ($byR[$j['region']] ?? 0) + 1;
         $body .= '<h2>Où trouver un emploi de ' . h($lname) . ' ?</h2>' . fr_map($byR, '/offres-emploi/');
@@ -170,6 +172,12 @@ function out_sitemap_metiers(array $site): void
     echo "<url><loc>$b/emploi/</loc><lastmod>$d</lastmod></url>";
     foreach ($db->query('SELECT slug FROM job_metiers') as $r) echo "<url><loc>$b/emploi/{$r['slug']}/</loc><lastmod>$d</lastmod></url>";
     echo "<url><loc>$b/salaire/</loc><lastmod>$d</lastmod></url>";
+    $db->exec('CREATE TABLE IF NOT EXISTS job_intent_map(id TEXT, intent TEXT, PRIMARY KEY(id, intent))');
+    foreach ($db->query("SELECT m.intent, j.region, COUNT(*) n FROM job_intent_map m JOIN jobs j ON j.id=m.id WHERE j.status='open' GROUP BY 1,2") as $r) {
+        static $seen = [];
+        if (empty($seen[$r['intent']])) { echo "<url><loc>$b/{$r['intent']}/</loc><lastmod>$d</lastmod></url>"; $seen[$r['intent']] = 1; }
+        if ($r['n'] >= 5 && isset(JOB_REGIONS[$r['region']])) echo "<url><loc>$b/{$r['intent']}/" . JOB_REGIONS[$r['region']][0] . "/</loc><lastmod>$d</lastmod></url>";
+    }
     foreach ($db->query('SELECT slug FROM job_metier_sal') as $r) echo "<url><loc>$b/salaire/{$r['slug']}/</loc><lastmod>$d</lastmod></url>";
     foreach ($db->query('SELECT mslug, cslug FROM job_metier_cities LIMIT 45000') as $r) echo "<url><loc>$b/emploi/{$r['mslug']}/{$r['cslug']}/</loc><lastmod>$d</lastmod></url>";
     echo '</urlset>';
@@ -276,3 +284,115 @@ function page_salaire(array $site, string $mslug): string
 }
 
 function metier_de(string $w): string { return (preg_match('/^[aeiouyhéèêëàâîïôöûü]/iu', $w) ? "d'" : 'de ') . $w; }
+
+// ---------- Maillage depuis une fiche offre ----------
+function metier_links_for_job(array $site, array $j): string
+{
+    $db = jobs_db($site['host']); metier_tables($db);
+    $st = $db->prepare('SELECT mm.mslug, mm.cslug, m.name, m.n, c.name cname, mc.n cn, s.med FROM job_metier_map mm JOIN job_metiers m ON m.slug=mm.mslug
+        LEFT JOIN job_metier_cities mc ON mc.mslug=mm.mslug AND mc.cslug=mm.cslug LEFT JOIN job_cities c ON c.slug=mm.cslug LEFT JOIN job_metier_sal s ON s.slug=mm.mslug WHERE mm.id=?');
+    $st->execute([$j['id']]);
+    if (!($r = $st->fetch())) return '';
+    $l = mb_strtolower($r['name']);
+    $links = [['Toutes les offres ' . metier_de($l), '/emploi/' . $r['mslug'] . '/', $r['n']]];
+    if ($r['cn']) $links[] = [$r['name'] . ' à ' . $r['cname'], '/emploi/' . $r['mslug'] . '/' . $r['cslug'] . '/', $r['cn']];
+    if ($r['med']) $links[] = ['Salaire ' . $l . ' : ' . metier_fmt_eur((float)$r['med']) . ' brut/mois', '/salaire/' . $r['mslug'] . '/', null];
+    return '<h2>Pour aller plus loin</h2><div class="cnt">' . implode('', array_map(fn($x) => '<a href="' . h($x[1]) . '">' . h($x[0]) . ($x[2] ? ' <b>' . number_format((int)$x[2], 0, ',', ' ') . '</b>' : '') . '</a>', $links)) . '</div>';
+}
+
+// ---------- Pages d'intention (emploi sans diplôme, étudiant, week-end…) ----------
+const JOB_INTENTS = [
+    'emploi-sans-diplome' => ['Emploi sans diplôme', "(description LIKE '%sans diplôme%' OR description LIKE '%aucun diplôme%' OR description LIKE '%pas de diplôme%' OR description LIKE '%sans qualification%' OR experience LIKE '%sans diplôme%')",
+        'Offres accessibles sans diplôme ni qualification particulière : l\'employeur forme au poste ou recherche avant tout la motivation.'],
+    'emploi-debutant' => ['Emploi débutant accepté', "(experience LIKE '%débutant%' OR description LIKE '%débutant accepté%' OR description LIKE '%débutants acceptés%' OR description LIKE '%débutant(e) accepté%' OR description LIKE '%aucune expérience requise%' OR description LIKE '%aucune expérience n\'est requise%')",
+        'Postes ouverts aux débutants, sans expérience exigée : idéal pour un premier emploi ou une reconversion.'],
+    'job-etudiant' => ['Job étudiant', "(title LIKE '%étudiant%' OR title LIKE '%ETUDIANT%' OR description LIKE '%job étudiant%' OR description LIKE '%emploi étudiant%' OR description LIKE '%compatible avec vos études%' OR description LIKE '%compatible avec des études%')",
+        'Jobs compatibles avec les études : temps partiel, soirs, week-ends ou vacances scolaires.'],
+    'job-week-end' => ['Job le week-end', "(title LIKE '%week-end%' OR title LIKE '%weekend%' OR title LIKE '%WEEK-END%' OR description LIKE '%week-end uniquement%' OR description LIKE '%les week-ends%' OR description LIKE '%samedi et dimanche%' OR description LIKE '%samedis et dimanches%')",
+        'Offres d\'emploi le samedi et le dimanche : complément de revenu, étudiants, double activité.'],
+    'emploi-teletravail' => ['Emploi en télétravail', "(title LIKE '%télétravail%' OR title LIKE '%TELETRAVAIL%' OR title LIKE '%full remote%' OR description LIKE '%télétravail%' OR description LIKE '%full remote%' OR description LIKE '%100% remote%')",
+        'Postes avec télétravail possible, partiel ou total : vérifiez le nombre de jours précisé dans chaque offre.'],
+    'emploi-temps-partiel' => ['Emploi à temps partiel', "(worktime LIKE '%partiel%' OR title LIKE '%temps partiel%' OR title LIKE '%TEMPS PARTIEL%')",
+        'Offres à temps partiel : moins de 35 heures par semaine, pour concilier emploi et vie personnelle.'],
+    'emploi-urgent' => ['Emploi urgent : prise de poste immédiate', "(title LIKE '%urgent%' OR title LIKE '%URGENT%' OR description LIKE '%poste à pourvoir immédiatement%' OR description LIKE '%prise de poste immédiate%' OR description LIKE '%poste à pourvoir dès que possible%' OR description LIKE '%démarrage immédiat%')",
+        'Recrutements urgents : postes à pourvoir immédiatement, réponses rapides des employeurs.'],
+];
+
+function intents_build(PDO $db): int
+{
+    $db->exec('CREATE TABLE IF NOT EXISTS job_intent_map(id TEXT, intent TEXT, PRIMARY KEY(id, intent)); CREATE INDEX IF NOT EXISTS ix_jim ON job_intent_map(intent)');
+    $db->beginTransaction(); $db->exec('DELETE FROM job_intent_map');
+    foreach (JOB_INTENTS as $k => [, $sql]) $db->exec("INSERT OR IGNORE INTO job_intent_map(id,intent) SELECT id, '$k' FROM jobs WHERE status='open' AND $sql");
+    $db->commit();
+    return (int)$db->query('SELECT COUNT(*) FROM job_intent_map')->fetchColumn();
+}
+
+function intent_counts(PDO $db): array
+{
+    $db->exec('CREATE TABLE IF NOT EXISTS job_intent_map(id TEXT, intent TEXT, PRIMARY KEY(id, intent))');
+    $o = []; foreach ($db->query("SELECT m.intent, COUNT(*) n FROM job_intent_map m JOIN jobs j ON j.id=m.id WHERE j.status='open' GROUP BY m.intent") as $r) $o[$r['intent']] = (int)$r['n'];
+    return $o;
+}
+
+function page_intent(array $site, string $key, ?array $reg, int $page): string
+{
+    if (!isset(JOB_INTENTS[$key])) return '';
+    [$label, , $intro] = JOB_INTENTS[$key];
+    $db = jobs_db($site['host']);
+    $w = "j.status='open' AND m.intent=?" . ($reg ? ' AND j.region=?' : ''); $args = $reg ? [$key, $reg['code']] : [$key];
+    $st = $db->prepare("SELECT COUNT(*) FROM jobs j JOIN job_intent_map m ON m.id=j.id WHERE $w"); $st->execute($args);
+    $total = (int)$st->fetchColumn();
+    if ($total < 5) return '';
+    $per = 30;
+    $st = $db->prepare("SELECT j.* FROM jobs j JOIN job_intent_map m ON m.id=j.id WHERE $w ORDER BY j.created_at DESC LIMIT $per OFFSET " . (($page - 1) * $per)); $st->execute($args);
+    $jobs = $st->fetchAll();
+    if (!$jobs) return '';
+    $nf = fn($n) => number_format($n, 0, ',', ' ');
+    $title = $label . ($reg ? ' en ' . $reg['name'] : '');
+    $base = '/' . $key . '/' . ($reg ? $reg['slug'] . '/' : '');
+    $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/offres-emploi/">Offres d\'emploi</a> › ' . ($reg ? '<a href="/' . $key . '/">' . h($label) . '</a> › ' . h($reg['name']) : h($label)) . '</p>'
+        . '<h1>' . h($title) . ' : ' . $nf($total) . ' offres</h1><p class="lead">' . h($intro) . ' ' . $nf($total) . ' offres ouvertes' . ($reg ? ' en ' . h($reg['name']) : ' en France') . ', mises à jour le ' . h(date_fr(now())) . '.</p>';
+    if (!$reg && $page === 1) {
+        $byR = []; $st = $db->prepare("SELECT j.region, COUNT(*) n FROM jobs j JOIN job_intent_map m ON m.id=j.id WHERE j.status='open' AND m.intent=? GROUP BY j.region"); $st->execute([$key]);
+        foreach ($st as $r) $byR[$r['region']] = (int)$r['n'];
+        $body .= '<style>' . fr_map_css() . '</style>' . fr_map(array_filter($byR, fn($n) => $n >= 5), '/' . $key . '/', 'offres')
+            . count_chips(array_values(array_filter(array_map(fn($c, $v) => $v >= 5 ? [JOB_REGIONS[$c][1], $v, '/' . $key . '/' . JOB_REGIONS[$c][0] . '/'] : null, array_keys($byR), $byR))));
+    }
+    $others = array_filter(array_map(fn($k, $v) => $k !== $key ? [$v[0], 0, '/' . $k . '/'] : null, array_keys(JOB_INTENTS), JOB_INTENTS));
+    $body .= '<div class="grid">' . implode('', array_map('job_card', $jobs)) . '</div>' . pager($base, $page, (int)ceil($total / $per))
+        . '<h2>Autres recherches</h2><div class="cnt">' . implode('', array_map(fn($o) => '<a href="' . h($o[2]) . '">' . h($o[0]) . '</a>', $others)) . '</div>' . jobs_disclaimer();
+    return layout($site, ['title' => $title . ' : ' . $nf($total) . ' offres' . ($page > 1 ? " — page $page" : '') . ' | ' . $site['name'],
+        'desc' => $nf($total) . ' offres : ' . mb_strtolower($title) . '. ' . $intro, 'canonical' => 'https://' . $site['host'] . $base . ($page > 1 ? "page/$page/" : ''),
+        'schema' => [breadcrumbs($site, array_values(array_filter([['Offres d\'emploi', '/offres-emploi/'], [$label, '/' . $key . '/'], $reg ? [$reg['name'], $base] : null])))]], $body);
+}
+
+function intents_chips(PDO $db): string
+{
+    $c = intent_counts($db);
+    $rows = []; foreach (JOB_INTENTS as $k => [$label]) if (($c[$k] ?? 0) >= 5) $rows[] = [$label, $c[$k], '/' . $k . '/'];
+    return $rows ? '<h2>Recherches populaires</h2>' . count_chips($rows) : '';
+}
+
+// ---------- Anciennes adresses WordPress (/localisation/, /region/) ----------
+function legacy_job_redirect(array $site, string $path): ?string
+{
+    $db = jobs_db($site['host']);
+    if (preg_match('#^/localisation/([a-z0-9\-]+)/#', $path, $m)) {
+        $slug = preg_replace('/^\d{5}-|-(\d{2,3}|2a|2b)$/', '', $m[1]);
+        jobs_cities_ready($db);
+        $st = $db->prepare('SELECT slug FROM job_cities WHERE slug=? OR slug LIKE ? ORDER BY n DESC LIMIT 1'); $st->execute([$slug, $slug . '-%']);
+        if ($c = $st->fetchColumn()) return '/offres-emploi/ville/' . $c . '/';
+        $dep = preg_match('/-(\d{2,3}|2a|2b)$/', $m[1], $d) ? strtoupper($d[1]) : (preg_match('/^(\d{2})\d{3}-/', $m[1], $d) ? $d[1] : '');
+        if ($dep && function_exists('csp_region_of_dep') && ($r = csp_region_of_dep($dep))) return '/offres-emploi/' . JOB_REGIONS[$r][0] . '/';
+        return '/offres-emploi/';
+    }
+    if (preg_match('#^/region/([a-z\-]+)#', $path, $m)) {
+        $old = ['alsace' => '44', 'lorraine' => '44', 'champagne-ardenne' => '44', 'aquitaine' => '75', 'limousin' => '75', 'poitou-charentes' => '75', 'auvergne' => '84', 'rhone-alpes' => '84',
+            'bourgogne' => '27', 'franche-comte' => '27', 'centre' => '24', 'basse-normandie' => '28', 'haute-normandie' => '28', 'nord-pas-de-calais' => '32', 'picardie' => '32',
+            'languedoc-roussillon' => '76', 'midi-pyrenees' => '76', 'paca' => '93', 'provence-alpes-cote-d-azur' => '93'];
+        foreach (JOB_REGIONS as $code => [$slug]) $old[$slug] = $code;
+        foreach ($old as $k => $code) if (str_starts_with($m[1], $k)) return '/offres-emploi/' . JOB_REGIONS[$code][0] . '/';
+        return '/offres-emploi/';
+    }
+    return null;
+}
