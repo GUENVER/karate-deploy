@@ -567,6 +567,11 @@ function out_sitemap_jobs(array $site, int $i): void
         $today = gmdate('Y-m-d');
         echo '<url><loc>https://' . $site['host'] . '/offres-emploi/</loc><lastmod>' . $today . '</lastmod></url>';
         foreach (JOB_REGIONS as [$s]) echo '<url><loc>https://' . $site['host'] . '/offres-emploi/' . $s . '/</loc><lastmod>' . $today . '</lastmod></url>';
+        if (function_exists('csp_tables') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' AND id LIKE 'csp-%' LIMIT 1")->fetchColumn()) {
+            echo '<url><loc>https://' . $site['host'] . '/emploi-public/</loc><lastmod>' . $today . '</lastmod></url>';
+            foreach (JOB_REGIONS as [$s]) echo '<url><loc>https://' . $site['host'] . '/emploi-public/' . $s . '/</loc><lastmod>' . $today . '</lastmod></url>';
+            foreach (array_keys(CSP_VERSANTS) as $v) echo '<url><loc>https://' . $site['host'] . '/emploi-public/versant/' . $v . '/</loc><lastmod>' . $today . '</lastmod></url>';
+        }
         jobs_cities_ready($db);
         foreach ($db->query('SELECT slug, updated FROM job_cities ORDER BY n DESC') as $c) echo '<url><loc>https://' . $site['host'] . '/offres-emploi/ville/' . h($c['slug']) . '/</loc><lastmod>' . substr((string)$c['updated'], 0, 10) . '</lastmod></url>';
     }
