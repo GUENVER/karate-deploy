@@ -96,6 +96,7 @@ function route(array $site, string $path): ?string
     if (preg_match('#^/page/(\d+)/?$#', $path, $m)) return page_home($site, (int)$m[1]);
     if (preg_match('#^/category/(?:[^/]+/)*([^/]+)/(?:page/(\d+)/?)?$#', $path, $m) && ($h = page_category($site, $m[1], (int)($m[2] ?? 1) ?: 1)) !== '') return $h;
     if (preg_match('#^/(a-propos|contact|mentions-legales|confidentialite|nos-sources)/?$#', $path, $m)) return page_static($site, $m[1]);
+    if ($path === '/plan-du-site/') return page_plan($site);
     if (!empty($site['fuel'])) {
         if ($path === '/prix-carburant/') return page_fuel_france($site);
         if (preg_match('#^/prix-carburant/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m) && ($dept = dept_by_slug($m[1])))
