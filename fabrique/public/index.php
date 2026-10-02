@@ -136,6 +136,11 @@ function route(array $site, string $path): ?string
             $c = (string)($_GET['contrat'] ?? '');
             return page_jobs_region($site, $reg, max(1, (int)($m[2] ?? 1)), isset(JOB_CONTRACTS[$c]) ? $c : '');
         }
+        if (preg_match('#^/(localisation|region)/#', $path) && ($to = legacy_job_redirect($site, $path))) { header('Location: ' . $to, true, 301); return null; }
+        if (preg_match('#^/(emploi-sans-diplome|emploi-debutant|job-etudiant|job-week-end|emploi-teletravail|emploi-temps-partiel|emploi-urgent)/(?:([a-z\-]+)/)?(?:page/(\d+)/)?$#', $path, $m)) {
+            $reg = !empty($m[2]) ? region_by_slug($m[2]) : null;
+            if (empty($m[2]) || $reg) return page_intent($site, $m[1], $reg, max(1, (int)($m[3] ?? 1)));
+        }
         if ($path === '/emploi/') return page_metiers_index($site);
         if ($path === '/salaire/') return page_salaires_index($site);
         if (preg_match('#^/salaire/([a-z0-9\-]+)/$#', $path, $m)) return page_salaire($site, $m[1]);
