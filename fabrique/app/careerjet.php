@@ -33,7 +33,8 @@ function careerjet_endpoint(array $site): void
         $ch = curl_init('https://search.api.careerjet.net/v4/query?' . http_build_query([
             'locale_code' => 'fr_FR', 'keywords' => $kw, 'location' => $loc, 'sort' => 'date', 'page_size' => 12, 'fragment_size' => 160,
             'user_ip' => $ip, 'user_agent' => (string)($_SERVER['HTTP_USER_AGENT'] ?? 'Mozilla/5.0')]));
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8, CURLOPT_USERPWD => $key . ':', CURLOPT_HTTPAUTH => CURLAUTH_BASIC]);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8, CURLOPT_USERPWD => $key . ':', CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
+            CURLOPT_REFERER => 'https://' . $site['host'] . '/']); // Careerjet exige un Referer déclaré
         $r = json_decode((string)curl_exec($ch), true);
         curl_close($ch);
         $jobs = ($r['type'] ?? '') === 'JOBS' ? array_slice((array)($r['jobs'] ?? []), 0, 12) : [];
