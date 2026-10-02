@@ -4,7 +4,7 @@
 declare(strict_types=1);
 
 const METIER_MIN = 30;       // offres ouvertes minimum pour une page métier
-const METIER_CITY_MIN = 6;   // offres minimum pour une page métier + ville
+const METIER_CITY_MIN = 5;   // offres minimum pour une page métier + ville
 
 function metier_tables(PDO $db): void
 {
@@ -49,13 +49,23 @@ function metiers_build(PDO $db): array
     jobs_cities_ready($db);
     $cities = [];
     foreach ($db->query('SELECT slug, name, region FROM job_cities') as $c) $cities[$c['region'] . '|' . $c['name']] = $c['slug'];
+    // code postal -> ville la plus fréquente parmi les offres dont le nom de commune est reconnu (rattache les variantes d'écriture)
+    $byPostal = [];
+    foreach ($db->query("SELECT city, postal, region FROM jobs WHERE status='open' AND length(postal)=5") as $j) {
+        $c = $cities[$j['region'] . '|' . job_city_norm((string)$j['city'])] ?? '';
+        if ($c !== '') $byPostal[$j['postal']][$c] = ($byPostal[$j['postal']][$c] ?? 0) + 1;
+    }
+    $byArea = []; // zone (3 premiers chiffres du code postal) -> ville principale : rattache les communes voisines (bassin d'emploi)
+    foreach ($byPostal as $pc => $cs) foreach ($cs as $c => $n) $byArea[substr((string)$pc, 0, 3)][$c] = ($byArea[substr((string)$pc, 0, 3)][$c] ?? 0) + $n;
+    foreach ($byArea as $a3 => $cs) { arsort($cs); $byArea[$a3] = array_key_first($cs); }
+    foreach ($byPostal as $pc => $cs) { arsort($cs); $byPostal[$pc] = array_key_first($cs); }
     $map = []; $cnt = []; $names = [];
-    foreach ($db->query("SELECT id, title, city, region FROM jobs WHERE status='open'") as $j) {
+    foreach ($db->query("SELECT id, title, city, postal, region FROM jobs WHERE status='open'") as $j) {
         if (!($m = metier_of((string)$j['title']))) continue;
         [$k, $n] = $m;
         $cnt[$k] = ($cnt[$k] ?? 0) + 1;
         $names[$k][$n] = ($names[$k][$n] ?? 0) + 1;
-        $map[] = [$j['id'], $k, $cities[$j['region'] . '|' . job_city_norm((string)$j['city'])] ?? ''];
+        $map[] = [$j['id'], $k, $cities[$j['region'] . '|' . job_city_norm((string)$j['city'])] ?? ($byPostal[(string)$j['postal']] ?? (strlen((string)$j['postal']) === 5 ? ($byArea[substr((string)$j['postal'], 0, 3)] ?? '') : ''))];
     }
     $keep = array_filter($cnt, fn($n) => $n >= METIER_MIN);
     $db->beginTransaction();
@@ -172,6 +182,7 @@ function out_sitemap_metiers(array $site): void
     echo "<url><loc>$b/emploi/</loc><lastmod>$d</lastmod></url>";
     foreach ($db->query('SELECT slug FROM job_metiers') as $r) echo "<url><loc>$b/emploi/{$r['slug']}/</loc><lastmod>$d</lastmod></url>";
     echo "<url><loc>$b/salaire/</loc><lastmod>$d</lastmod></url>";
+    if (function_exists('csp_type_links')) foreach (csp_type_links($db, true) as $l) echo "<url><loc>$b{$l[1]}</loc><lastmod>$d</lastmod></url>";
     $db->exec('CREATE TABLE IF NOT EXISTS job_intent_map(id TEXT, intent TEXT, PRIMARY KEY(id, intent))');
     foreach ($db->query("SELECT m.intent, j.region, COUNT(*) n FROM job_intent_map m JOIN jobs j ON j.id=m.id WHERE j.status='open' GROUP BY 1,2") as $r) {
         static $seen = [];
@@ -395,4 +406,48 @@ function legacy_job_redirect(array $site, string $path): ?string
         return '/offres-emploi/';
     }
     return null;
+}
+
+// ---------- Recherche d'offres interne (non indexée, jamais en cache) ----------
+function page_job_search(array $site, string $q, string $l): string
+{
+    $db = jobs_db($site['host']);
+    $q = trim(mb_substr($q, 0, 60)); $l = trim(mb_substr($l, 0, 40));
+    $where = "status='open'"; $args = [];
+    foreach (array_slice(preg_split('/\s+/u', $q, -1, PREG_SPLIT_NO_EMPTY), 0, 4) as $w) { $where .= ' AND (title LIKE ? OR company LIKE ?)'; $args[] = "%$w%"; $args[] = "%$w%"; }
+    if ($l !== '') {
+        $reg = null; foreach (JOB_REGIONS as $code => [$slug, $name]) if (slugify($name) === slugify($l)) $reg = $code;
+        if ($reg) { $where .= ' AND region=?'; $args[] = $reg; }
+        elseif (preg_match('/^\d{2,5}$/', $l)) { $where .= ' AND postal LIKE ?'; $args[] = $l . '%'; }
+        else { $where .= ' AND city LIKE ?'; $args[] = "%$l%"; }
+    }
+    $jobs = [];
+    $n = 0;
+    if ($q !== '' || $l !== '') {
+        $st = $db->prepare("SELECT COUNT(*) FROM (SELECT 1 FROM jobs WHERE $where LIMIT 2000)"); $st->execute($args); $n = (int)$st->fetchColumn();
+        $st = $db->prepare("SELECT * FROM jobs WHERE $where ORDER BY created_at DESC LIMIT 40"); $st->execute($args); $jobs = $st->fetchAll();
+    }
+    $form = '<form action="/chercher/" method="get" style="display:flex;flex-wrap:wrap;gap:8px;margin:16px 0"><input name="q" value="' . h($q) . '" placeholder="Métier, mot-clé, entreprise" style="flex:2 1 220px;padding:10px;border:1px solid var(--b);border-radius:8px">'
+        . '<input name="l" value="' . h($l) . '" placeholder="Ville, département ou région" style="flex:1 1 160px;padding:10px;border:1px solid var(--b);border-radius:8px">'
+        . '<button style="background:var(--c);color:#fff;border:0;border-radius:8px;padding:10px 18px;font-weight:700">Rechercher</button></form>';
+    $body = '<h1 style="margin-top:28px">Rechercher une offre d\'emploi</h1>' . $form;
+    if ($q !== '' || $l !== '') {
+        $body .= '<p><strong>' . ($n >= 2000 ? 'Plus de 2 000' : number_format($n, 0, ',', ' ')) . ' offre' . ($n > 1 ? 's' : '') . '</strong>' . ($q !== '' ? ' pour « ' . h($q) . ' »' : '') . ($l !== '' ? ' à ' . h($l) : '') . '.</p>';
+        if ($jobs) $body .= '<div class="grid">' . implode('', array_map('job_card', $jobs)) . '</div>';
+        if ($q !== '' && ($m = metier_of($q))) { metier_tables($db); $st = $db->prepare('SELECT slug, name, n FROM job_metiers WHERE slug=?'); $st->execute([$m[0]]); if ($r = $st->fetch()) $body .= '<p><a href="/emploi/' . h($r['slug']) . '/"><strong>Toutes les offres ' . h(metier_de(mb_strtolower($r['name']))) . ' (' . (int)$r['n'] . ') →</strong></a></p>'; }
+        if (!$jobs) $body .= '<p>Aucune offre ne correspond. Essayez un terme plus court ou consultez <a href="/emploi/">les offres par métier</a>.</p>';
+    } else $body .= (function_exists('intents_chips') ? intents_chips($db) : '');
+    return layout($site, ['title' => 'Rechercher une offre d\'emploi' . ($q !== '' ? ' : ' . $q : '') . ' | ' . $site['name'], 'desc' => '', 'robots' => 'noindex,follow'], $body);
+}
+
+// Offres du même métier (même région en priorité) sous une fiche : plus de pages vues par visite.
+function metier_similar_for_job(array $site, array $j): string
+{
+    $db = jobs_db($site['host']); metier_tables($db);
+    $st = $db->prepare('SELECT mslug FROM job_metier_map WHERE id=?'); $st->execute([$j['id']]);
+    if (!($ms = $st->fetchColumn())) return '';
+    $st = $db->prepare("SELECT j.* FROM jobs j JOIN job_metier_map mm ON mm.id=j.id WHERE mm.mslug=? AND j.status='open' AND j.id<>? ORDER BY (j.region=?) DESC, j.created_at DESC LIMIT 6");
+    $st->execute([$ms, $j['id'], $j['region']]);
+    $rows = $st->fetchAll();
+    return $rows ? '<h2>Offres proches pour ce métier</h2><div class="grid">' . implode('', array_map('job_card', $rows)) . '</div>' : '';
 }
