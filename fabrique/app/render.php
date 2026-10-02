@@ -44,6 +44,12 @@ aside ul{padding-left:18px;margin:0;font-size:.93rem}aside li{margin:6px 0}.pag{
 .ddp{position:absolute;left:0;top:36px;z-index:50;background:#fff;border:1px solid var(--b);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:14px 18px;width:min(560px,92vw);display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;font-size:.9rem}
 .ddp b{grid-column:1/-1;margin:8px 0 2px;color:var(--c);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}.ddp a{color:var(--t)!important;padding:3px 0}.ddp a:hover{color:var(--c)!important}
 @media(max-width:700px){.ddp{position:static;box-shadow:none;width:100%;margin-top:8px}}
+header.hl .hlw{justify-content:center;padding:16px 16px 10px}.hlogo img{height:70px;width:auto;display:block}
+.hnav{border-top:1px solid var(--b);background:var(--s)}.hnav .w{display:flex;align-items:center;gap:14px;padding:8px 16px}
+.hnav nav.cats{flex:1;flex-wrap:nowrap;overflow-x:auto;gap:4px;scrollbar-width:none;justify-content:flex-start}.hnav nav.cats::-webkit-scrollbar{display:none}
+.hnav nav.cats a{white-space:nowrap;padding:5px 11px;border-radius:8px;color:var(--t);font-weight:500}.hnav nav.cats a:hover,.hnav nav.cats a[aria-current]{background:#fff;color:var(--c);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.hnav form.q{margin-left:0}.hnav form.q input{width:180px;background:#fff}
+@media(max-width:700px){.hlogo img{height:50px}.hnav .w{flex-wrap:wrap;gap:8px}.hnav form.q{flex:1 1 100%;order:3}.hnav form.q input{width:100%}.hnav nav.cats{flex:1 1 100%;order:2;-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent);padding-right:30px}}
 footer.bot{border-top:1px solid var(--b);margin-top:50px;padding:26px 0;color:var(--m);font-size:.88rem;background:var(--s)}footer.bot a{color:var(--m);margin-right:14px}";
 }
 
@@ -62,14 +68,14 @@ function layout(array $site, array $m, string $body): string
     if ($site['adsense'] && $pub && empty($m['noads'])) $head .= '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' . h($pub) . '" crossorigin="anonymous"></script>';
     if ($ga = (setting('ga4_id:' . $site['host'], '') ?: setting('ga4_id', ''))) $head .= '<script async src="https://www.googletagmanager.com/gtag/js?id=' . h($ga) . '"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","' . h($ga) . '");</script>';
 
-    $nav = '';
+    $nav = ''; $navJobs = '';
     if (!empty($site['fuel'])) $nav .= '<a href="/prix-carburant/"><strong>Prix carburant</strong></a>';
     if (function_exists('places_mod') && ($pm = places_mod($site))) $nav .= '<a href="/' . $pm['prefix'] . '/"><strong>' . h($pm['nav']) . '</strong></a>';
     if (!empty($site['commune'])) $nav .= '<a href="/commune/"><strong>Fiches communes</strong></a>';
     if (!empty($site['dpe'])) $nav .= '<a href="/dpe/"><strong>DPE de votre commune</strong></a>';
     if (!empty($site['ev'])) $nav .= '<a href="/bornes-recharge/"><strong>Bornes de recharge</strong></a>';
-    if (!empty($site['jobs']) && function_exists('jobs_db') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' LIMIT 1")->fetchColumn()) $nav .= jobs_menu($site);
-    foreach (array_slice(site_categories($site), 0, 7) as $c) $nav .= '<a href="/category/' . h($c['slug']) . '/">' . h($c['name']) . '</a>';
+    if (!empty($site['jobs']) && function_exists('jobs_db') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' LIMIT 1")->fetchColumn()) $navJobs = jobs_menu($site);
+    foreach (array_slice(site_categories($site), 0, 7) as $c) $nav .= '<a href="/category/' . h($c['slug']) . '/"' . (str_starts_with((string)($_SERVER['REQUEST_URI'] ?? ''), '/category/' . $c['slug'] . '/') ? ' aria-current="page"' : '') . '>' . h(nav_label($c['name'])) . '</a>';
     $parts = explode(' ', $site['name'], 2);
     $logo = h($parts[0]) . (isset($parts[1]) ? ' <span>' . h($parts[1]) . '</span>' : '');
     $year = gmdate('Y');
@@ -77,8 +83,12 @@ function layout(array $site, array $m, string $body): string
 
     return '<!doctype html><html lang="' . h($site['lang'] ?: 'fr') . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         . $head . '<style>' . css($site) . '</style></head><body>'
-        . '<header class="top"><div class="w"><a class="logo" href="/">' . $logo . '</a><nav class="cats">' . $nav . '</nav>'
-        . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></header>'
+        . (($lg = setting('logo:' . $site['host'], ''))
+            ? '<header class="top hl"><div class="w hlw"><a class="hlogo" href="/" aria-label="' . h($site['name']) . ' — accueil"><img src="' . h($lg) . '" alt="' . h($site['name']) . '" width="272" height="70" fetchpriority="high"></a></div>'
+              . '<div class="hnav"><div class="w">' . $navJobs . '<nav class="cats" aria-label="Rubriques">' . $nav . '</nav>'
+              . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></div></header>'
+            : '<header class="top"><div class="w"><a class="logo" href="/">' . $logo . '</a><nav class="cats">' . $navJobs . $nav . '</nav>'
+              . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></header>')
         . '<main class="w">' . $body . '</main>'
         . '<footer class="bot"><div class="w"><p><strong>' . h($site['name']) . '</strong> — ' . h($site['tagline']) . '</p>'
         . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a><a href="/confidentialite/">Confidentialité</a><a href="/sitemap.xml">Plan du site</a></p>'
@@ -109,6 +119,14 @@ function jobs_home_regions(array $site): string
     foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $l .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . ' <small>(' . number_format($counts[$code], 0, ',', ' ') . ')</small></a>';
     return '<section class="box" style="margin:22px 0;padding:16px 20px;border:1px solid var(--b);border-radius:12px"><h2 style="margin:0 0 10px;font-size:1.25rem">Offres d\'emploi par région — ' . number_format(array_sum($counts), 0, ',', ' ') . ' offres</h2>'
         . '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;font-size:.95rem">' . $l . '</div><p style="margin:10px 0 0"><a href="/offres-emploi/"><strong>Voir toutes les offres →</strong></a></p></section>';
+}
+
+// Libellé de menu en casse française (« Cv Et Lettre De Motivation » -> « CV et lettre de motivation »).
+function nav_label(string $n): string
+{
+    $l = mb_strtolower(trim($n));
+    $l = preg_replace_callback('/\b(cv|rh|rgpd|cdi|cdd)\b/u', fn($m) => mb_strtoupper($m[1]), $l);
+    return mb_strtoupper(mb_substr($l, 0, 1)) . mb_substr($l, 1);
 }
 
 function card(array $p, bool $h2 = true): string
