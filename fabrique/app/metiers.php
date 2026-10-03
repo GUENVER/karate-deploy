@@ -82,6 +82,7 @@ function metiers_build(PDO $db): array
     foreach (array_keys($keep) as $k) if (($s = metier_salary_stats(metier_jobs($db, (string)$k))) && $s['n'] >= 8) $is->execute([$k, $s['n'], $s['med'], $s['p25'], $s['p75']]);
     $db->commit();
     intents_build($db);
+    barometre_snapshot($db);
     return ['metiers' => count($keep), 'combos' => (int)$db->query('SELECT COUNT(*) FROM job_metier_cities')->fetchColumn()];
 }
 
@@ -181,7 +182,7 @@ function out_sitemap_metiers(array $site): void
     echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
     echo "<url><loc>$b/emploi/</loc><lastmod>$d</lastmod></url>";
     foreach ($db->query('SELECT slug FROM job_metiers') as $r) echo "<url><loc>$b/emploi/{$r['slug']}/</loc><lastmod>$d</lastmod></url>";
-    echo "<url><loc>$b/salaire/</loc><lastmod>$d</lastmod></url>";
+    echo "<url><loc>$b/salaire/</loc><lastmod>$d</lastmod></url><url><loc>$b/barometre-emploi/</loc><lastmod>$d</lastmod></url>";
     if (function_exists('csp_type_links')) foreach (csp_type_links($db, true) as $l) echo "<url><loc>$b{$l[1]}</loc><lastmod>$d</lastmod></url>";
     $db->exec('CREATE TABLE IF NOT EXISTS job_intent_map(id TEXT, intent TEXT, PRIMARY KEY(id, intent))');
     foreach ($db->query("SELECT m.intent, j.region, COUNT(*) n FROM job_intent_map m JOIN jobs j ON j.id=m.id WHERE j.status='open' GROUP BY 1,2") as $r) {
@@ -450,4 +451,89 @@ function metier_similar_for_job(array $site, array $j): string
     $st->execute([$ms, $j['id'], $j['region']]);
     $rows = $st->fetchAll();
     return $rows ? '<h2>Offres proches pour ce métier</h2><div class="grid">' . implode('', array_map('job_card', $rows)) . '</div>' : '';
+}
+
+// ---------- Baromètre mensuel de l'emploi (chiffres datés, cités par les IA) ----------
+function barometre_snapshot(PDO $db): void
+{
+    $db->exec('CREATE TABLE IF NOT EXISTS job_barometre(month TEXT PRIMARY KEY, data TEXT, updated TEXT)');
+    $q = fn(string $sql) => $db->query($sql)->fetchAll();
+    $d = [
+        'total' => (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open'")->fetchColumn(),
+        'new7' => (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND created_at>=datetime('now','-7 days')")->fetchColumn(),
+        'regions' => array_column($q("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region"), 'n', 'region'),
+        'contracts' => array_column($q("SELECT contract, COUNT(*) n FROM jobs WHERE status='open' GROUP BY contract"), 'n', 'contract'),
+        'public' => (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn(),
+        'metiers' => array_column($q('SELECT slug, n FROM job_metiers ORDER BY n DESC LIMIT 40'), 'n', 'slug'),
+        'names' => array_column($q('SELECT slug, name FROM job_metiers'), 'name', 'slug'),
+        'salaires' => array_map(fn($r) => [(float)$r['med'], (float)$r['p25'], (float)$r['p75'], (int)$r['n']], array_column($q('SELECT slug, med, p25, p75, n FROM job_metier_sal'), null, 'slug')),
+        'intents' => function_exists('intent_counts') ? intent_counts($db) : [],
+    ];
+    $db->prepare('INSERT OR REPLACE INTO job_barometre(month,data,updated) VALUES(?,?,?)')->execute([gmdate('Y-m'), json_encode($d, JSON_UNESCAPED_UNICODE), now()]);
+}
+
+function page_barometre(array $site): string
+{
+    $db = jobs_db($site['host']);
+    $db->exec('CREATE TABLE IF NOT EXISTS job_barometre(month TEXT PRIMARY KEY, data TEXT, updated TEXT)');
+    $rows = $db->query('SELECT month, data, updated FROM job_barometre ORDER BY month DESC LIMIT 2')->fetchAll();
+    if (!$rows) return '';
+    $d = json_decode($rows[0]['data'], true); $p = isset($rows[1]) ? json_decode($rows[1]['data'], true) : null;
+    $mois = ['01' => 'janvier', '02' => 'février', '03' => 'mars', '04' => 'avril', '05' => 'mai', '06' => 'juin', '07' => 'juillet', '08' => 'août', '09' => 'septembre', '10' => 'octobre', '11' => 'novembre', '12' => 'décembre'];
+    $label = $mois[substr($rows[0]['month'], 5, 2)] . ' ' . substr($rows[0]['month'], 0, 4);
+    $nf = fn($n) => number_format((float)$n, 0, ',', ' ');
+    $pct = fn($a, $b) => $b ? sprintf('%+d %%', round(100 * ($a - $b) / $b)) : '—';
+    $evo = fn($a, $b) => $p ? ' (' . $pct($a, $b) . ' sur un mois)' : '';
+    $tot = (int)$d['total'];
+    $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › Baromètre de l\'emploi</p>'
+        . '<h1>Baromètre de l\'emploi en France — ' . h($label) . '</h1>'
+        . '<p class="lead">Chiffres calculés sur les <strong>' . $nf($tot) . ' offres d\'emploi ouvertes</strong> recensées par ' . h($site['name']) . ' (France Travail, Choisir le service public, La bonne alternance et partenaires). Données mises à jour le ' . h(date_fr($rows[0]['updated'])) . '.</p>'
+        . '<div class="kpi"><div><b>' . $nf($tot) . '</b>offres ouvertes' . h($evo($tot, $p['total'] ?? 0)) . '</div><div><b>' . $nf($d['new7']) . '</b>nouvelles offres en 7 jours</div>'
+        . '<div><b>' . $nf($d['public']) . '</b>offres d\'emploi public</div><div><b>' . $nf($d['contracts']['alternance'] ?? 0) . '</b>offres en alternance</div></div>';
+    // régions
+    arsort($d['regions']); $tr = '';
+    foreach ($d['regions'] as $code => $n) if (isset(JOB_REGIONS[$code])) $tr .= '<tr><td><a href="/offres-emploi/' . JOB_REGIONS[$code][0] . '/">' . h(JOB_REGIONS[$code][1]) . '</a></td><td align="right">' . $nf($n) . '</td><td align="right">' . round(100 * $n / max(1, $tot), 1) . ' %</td>' . ($p ? '<td align="right">' . $pct($n, $p['regions'][$code] ?? 0) . '</td>' : '') . '</tr>';
+    $body .= '<h2>Offres d\'emploi par région</h2><div style="overflow-x:auto"><table><tr><th>Région</th><th>Offres</th><th>Part</th>' . ($p ? '<th>Évolution</th>' : '') . '</tr>' . $tr . '</table></div>';
+    // contrats
+    arsort($d['contracts']); $tc = '';
+    foreach ($d['contracts'] as $k => $n) if ($k !== '') $tc .= '<tr><td>' . h(JOB_CONTRACTS[$k] ?? ucfirst($k)) . '</td><td align="right">' . $nf($n) . '</td><td align="right">' . round(100 * $n / max(1, $tot), 1) . ' %</td></tr>';
+    $body .= '<h2>Répartition par type de contrat</h2><table><tr><th>Contrat</th><th>Offres</th><th>Part</th></tr>' . $tc . '</table>';
+    // métiers qui recrutent
+    $tm = ''; $i = 0;
+    foreach ($d['metiers'] as $s => $n) { if (++$i > 25) break; $sal = $d['salaires'][$s] ?? null;
+        $tm .= '<tr><td>' . $i . '</td><td><a href="/emploi/' . h($s) . '/">' . h($d['names'][$s] ?? $s) . '</a></td><td align="right">' . $nf($n) . '</td><td align="right">' . ($sal ? '<a href="/salaire/' . h($s) . '/">' . metier_fmt_eur($sal[0]) . '</a>' : '—') . '</td>' . ($p ? '<td align="right">' . (isset($p['metiers'][$s]) ? $pct($n, $p['metiers'][$s]) : 'nouveau') . '</td>' : '') . '</tr>'; }
+    $body .= '<h2>Les 25 métiers qui recrutent le plus</h2><div style="overflow-x:auto"><table><tr><th>#</th><th>Métier</th><th>Offres</th><th>Salaire médian brut/mois</th>' . ($p ? '<th>Évolution</th>' : '') . '</tr>' . $tm . '</table></div>';
+    // salaires
+    $sal = $d['salaires']; uasort($sal, fn($a, $b) => $b[0] <=> $a[0]);
+    $ts = fn(array $list) => implode('', array_map(fn($s, $v) => '<tr><td><a href="/salaire/' . h($s) . '/">' . h($d['names'][$s] ?? $s) . '</a></td><td align="right">' . metier_fmt_eur($v[0]) . '</td><td align="right">' . metier_fmt_eur($v[1]) . ' – ' . metier_fmt_eur($v[2]) . '</td></tr>', array_keys($list), $list));
+    $body .= '<h2>Salaires proposés : les mieux et les moins bien payés</h2><p>Salaires bruts mensuels médians proposés dans les offres qui indiquent une rémunération.</p>'
+        . '<h3>Les 10 métiers les mieux payés</h3><table><tr><th>Métier</th><th>Médiane</th><th>Fourchette</th></tr>' . $ts(array_slice($sal, 0, 10, true)) . '</table>'
+        . '<h3>Les 10 métiers les moins bien payés</h3><table><tr><th>Métier</th><th>Médiane</th><th>Fourchette</th></tr>' . $ts(array_slice($sal, -10, 10, true)) . '</table>';
+    // intentions
+    if (!empty($d['intents'])) $body .= '<h2>Offres accessibles</h2>' . count_chips(array_values(array_filter(array_map(fn($k, $v) => isset(JOB_INTENTS[$k]) ? [JOB_INTENTS[$k][0], $v, '/' . $k . '/'] : null, array_keys($d['intents']), $d['intents']))));
+    $body .= '<h2>Méthodologie</h2><p>Le baromètre est calculé automatiquement sur l\'ensemble des offres ouvertes au jour de la mise à jour, dédoublonnées par source. Les métiers sont regroupés à partir des intitulés des offres ; les salaires médians portent sur les offres indiquant une rémunération, converties en brut mensuel temps plein. Les évolutions comparent au mois précédent. Reproduction autorisée avec mention « source : ' . h($site['name']) . ' (' . h($site['host']) . ') ».</p>' . jobs_disclaimer();
+    $schema = [breadcrumbs($site, [['Baromètre de l\'emploi', '/barometre-emploi/']]),
+        ['@context' => 'https://schema.org', '@type' => 'Dataset', 'name' => 'Baromètre de l\'emploi en France — ' . $label, 'description' => 'Offres d\'emploi ouvertes en France par région, contrat et métier, avec salaires médians proposés.',
+            'url' => 'https://' . $site['host'] . '/barometre-emploi/', 'temporalCoverage' => $rows[0]['month'], 'dateModified' => substr($rows[0]['updated'], 0, 10), 'spatialCoverage' => 'France',
+            'creator' => ['@type' => 'Organization', 'name' => $site['name'], 'url' => 'https://' . $site['host'] . '/'], 'license' => 'https://creativecommons.org/licenses/by/4.0/', 'isAccessibleForFree' => true]];
+    return layout($site, ['title' => 'Baromètre de l\'emploi ' . $label . ' : ' . $nf($tot) . ' offres, métiers et salaires | ' . $site['name'],
+        'desc' => 'Baromètre de l\'emploi ' . $label . ' : ' . $nf($tot) . ' offres ouvertes, régions, contrats, métiers qui recrutent et salaires médians. Chiffres datés et sourcés.',
+        'canonical' => 'https://' . $site['host'] . '/barometre-emploi/', 'schema' => $schema], $body);
+}
+
+// ---------- /llms.txt : sommaire du site pour les assistants IA ----------
+function out_llms_txt(array $site): void
+{
+    header('Content-Type: text/plain; charset=utf-8');
+    $b = 'https://' . $site['host'];
+    $db = jobs_db($site['host']);
+    $tot = number_format((int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open'")->fetchColumn(), 0, ',', ' ');
+    echo "# {$site['name']}\n\n> Agrégateur français d'offres d'emploi : $tot offres ouvertes (CDI, CDD, intérim, alternance, emploi public), mises à jour plusieurs fois par jour depuis France Travail, Choisir le service public (DGAFP), La bonne alternance et des partenaires. Chaque offre renvoie vers le site d'origine pour postuler.\n\n";
+    echo "## Sections principales\n- [Offres d'emploi par région]($b/offres-emploi/)\n- [Offres par métier]($b/emploi/) : nombre d'offres, salaire médian, villes qui recrutent, formations\n- [Salaires par métier]($b/salaire/) : salaires bruts mensuels médians proposés dans les offres\n- [Emploi public]($b/emploi-public/) : fonction publique d'État, territoriale et hospitalière, par type d'employeur et par département\n- [Baromètre de l'emploi]($b/barometre-emploi/) : chiffres mensuels datés (régions, contrats, métiers, salaires)\n- [Plan du site]($b/plan-du-site/)\n\n";
+    echo "## Recherches fréquentes\n";
+    foreach (JOB_INTENTS as $k => [$l]) echo "- [$l]($b/$k/)\n";
+    echo "\n## Métiers qui recrutent le plus\n";
+    foreach ($db->query('SELECT slug, name, n FROM job_metiers ORDER BY n DESC LIMIT 30') as $m) echo "- [{$m['name']}]($b/emploi/{$m['slug']}/) : {$m['n']} offres\n";
+    echo "\n## Sources et méthode\n- [Nos sources]($b/nos-sources/)\n- Données dédoublonnées ; offres expirées retirées automatiquement. Citation autorisée avec mention de la source ({$site['host']}).\n";
+    exit;
 }
