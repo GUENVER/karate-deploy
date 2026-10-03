@@ -83,7 +83,7 @@ function layout(array $site, array $m, string $body): string
     $amzDisc = $site['amazon'] && setting('amazon_tag', '') ? '<p class="disc">En tant que Partenaire Amazon, ' . h($site['name']) . ' réalise un bénéfice sur les achats remplissant les conditions requises. Les liens marqués « Voir sur Amazon » sont des liens d\'affiliation.</p>' : '';
 
     return '<!doctype html><html lang="' . h($site['lang'] ?: 'fr') . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        . $head . '<style>' . css($site) . '</style></head><body>'
+        . $head . '<style>' . css($site) . (!empty($site['jobs']) ? jobs_css() : '') . '</style></head><body' . (!empty($site['jobs']) ? ' class="jobs"' : '') . '>'
         . (($lg = setting('logo:' . $site['host'], ''))
             ? '<header class="top hl"><div class="w hlw"><a class="hlogo" href="/" aria-label="' . h($site['name']) . ' — accueil"><img src="' . h($lg) . '" alt="' . h($site['name']) . '" width="288" height="70" fetchpriority="high"></a></div>'
               . '<div class="hnav"><div class="w">' . $navJobs . '<nav class="cats" aria-label="Rubriques">' . $nav . '</nav>'
@@ -98,6 +98,16 @@ function layout(array $site, array $m, string $body): string
 
 // Menu « Offres d'emploi » déroulant : toutes les offres, régions, grandes villes.
 function jobs_menu(array $site): string
+{
+    // mis en cache 1 h : ce menu est affiché sur toutes les pages (requêtes de comptage coûteuses)
+    $cf = cfg('data_dir') . '/cache/' . $site['host'] . '.menu.html';
+    if (is_file($cf) && filemtime($cf) > time() - 3600) return (string)file_get_contents($cf);
+    $out = jobs_menu_build($site);
+    @file_put_contents($cf, $out, LOCK_EX);
+    return $out;
+}
+
+function jobs_menu_build(array $site): string
 {
     $db = jobs_db($site['host']);
     $counts = [];
@@ -120,7 +130,9 @@ function jobs_home_regions(array $site): string
     if (!$counts) return '';
     $nf = fn($n) => number_format($n, 0, ',', ' ');
     $total = array_sum($counts);
+    $nm = function_exists('metier_tables') ? (metier_tables($db) ?? 0) + (int)$db->query('SELECT COUNT(*) FROM job_metiers')->fetchColumn() : 0;
     $o = '<section class="jhome" style="margin:22px 0 30px"><h1 style="margin:0 0 6px">' . $nf($total) . ' offres d\'emploi en France</h1>'
+        . '<div class="jhome-stats"><div><b>' . $nf($total) . '</b>offres ouvertes</div>' . ($nm ? '<div><b>' . $nf($nm) . '</b>métiers</div>' : '') . '<div><b>' . count($counts) . '</b>régions</div><div><b>' . $nf((int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND created_at>=datetime('now','-1 day')")->fetchColumn()) . '</b>nouvelles en 24 h</div></div>'
         . '<p style="margin:0 0 6px">CDI, CDD, intérim, alternance et emploi public, dans toutes les régions. Mis à jour le ' . h(date_fr(now())) . '.</p>'
         . '<form action="/chercher/" method="get" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px"><input name="q" placeholder="Métier, mot-clé, entreprise" aria-label="Métier" style="flex:2 1 220px;padding:11px;border:1px solid var(--b);border-radius:8px;font-size:1rem"><input name="l" placeholder="Ville, département ou région" aria-label="Lieu" style="flex:1 1 160px;padding:11px;border:1px solid var(--b);border-radius:8px;font-size:1rem"><button style="background:var(--c);color:#fff;border:0;border-radius:8px;padding:11px 20px;font-weight:700;font-size:1rem">Rechercher</button></form>';
     if (function_exists('fr_map')) $o .= '<style>' . fr_map_css() . '</style><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><div style="flex:1 1 380px">' . fr_map($counts, '/offres-emploi/') . '</div><div style="flex:1 1 300px">';
@@ -463,4 +475,40 @@ function page_404(array $site): string
     [$posts] = list_posts($site, '', [], 1, 6);
     return layout($site, ['title' => 'Page introuvable | ' . $site['name'], 'robots' => 'noindex,follow', 'noads' => true],
         '<h1 style="margin-top:28px">Page introuvable</h1><p>Cette page n\'existe pas ou a été déplacée. Voici nos derniers articles :</p><div class="grid">' . implode('', array_map('card', $posts)) . '</div>');
+}
+
+// Habillage des sites d'emploi : police Inter (auto-hébergée), couleurs du logo, cartes et fiches d'offres.
+function jobs_css(): string
+{
+    return "@font-face{font-family:Inter;font-style:normal;font-weight:400 800;font-display:swap;src:url(/_m/site/inter-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}"
+    . "@font-face{font-family:Inter;font-style:normal;font-weight:400 800;font-display:swap;src:url(/_m/site/inter-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}"
+    . ".jobs{--c:#0055a4;--a:#00b09b;--t:#1a2433;--m:#5e6b7a;--b:#e3e8ef;--s:#f4f7fb}"
+    . "body.jobs{font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:17px;line-height:1.65;background:#fbfcfe}"
+    . ".jobs h1,.jobs h2,.jobs h3{font-family:Inter,system-ui,sans-serif;letter-spacing:-.02em;color:#0f1b2d;line-height:1.25}"
+    . ".jobs h1{font-size:clamp(1.6rem,3.2vw,2.3rem);font-weight:800;margin:.6em 0 .4em}.jobs h2{font-size:1.35rem;font-weight:750;margin:1.8em 0 .7em;padding-bottom:.35em;border-bottom:2px solid var(--b)}"
+    . ".jobs .lead,.jobs main>p:first-of-type{font-size:1.05rem;color:#344255}"
+    . ".jobs .crumbs{font-size:.85rem;color:var(--m)}.jobs .crumbs a{color:var(--m)}"
+    . ".jobs .grid{gap:16px}"
+    . ".jobs .card.jc{background:#fff;border:1px solid var(--b);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);transition:box-shadow .15s,transform .15s,border-color .15s;overflow:hidden}"
+    . ".jobs .card.jc:hover{box-shadow:0 8px 24px rgba(16,24,40,.10);transform:translateY(-2px);border-color:#c9d6e8}"
+    . ".jc .in{padding:18px 18px 16px;display:flex;flex-direction:column;gap:10px;height:100%}"
+    . ".jc-h{display:flex;gap:12px;align-items:flex-start}.jc-logo{flex:0 0 42px;height:42px;border-radius:10px;color:#fff;font-weight:800;font-size:1.1rem;display:flex;align-items:center;justify-content:center}"
+    . ".jc-t{min-width:0}.jc h3{font-size:1.02rem;margin:0;line-height:1.35}.jc h3 a{color:#0f1b2d;text-decoration:none}.jc h3 a:hover{color:var(--c)}"
+    . ".jc-co{margin:3px 0 0;font-size:.88rem;color:var(--m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"
+    . ".jc-tags{display:flex;flex-wrap:wrap;gap:6px}.tag{font-size:.75rem;font-weight:650;padding:3px 10px;border-radius:999px;background:#eef2f7;color:#334155}"
+    . ".t-cdi{background:#e6f6ee;color:#0f7a43}.t-cdd{background:#e8f0fb;color:#0055a4}.t-interim{background:#fdf0e3;color:#b4540a}.t-alternance{background:#f1ebfb;color:#6b35b8}.t-stage{background:#fdeaf1;color:#b4235a}.t-freelance{background:#e9f7f6;color:#00796f}.t-pub{background:#e6f1fa;color:#0b4f8a}.t-sal{background:#e7f8f5;color:#00806f}"
+    . ".jc-meta{margin:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.85rem;color:var(--m)}.jc-meta span,.jsum-h span{display:inline-flex;align-items:center;gap:4px}.jc-meta svg{color:#8a97a8}"
+    . ".jc-btn{margin-top:auto;align-self:flex-start;font-size:.88rem;font-weight:650;color:var(--c);text-decoration:none;border:1.5px solid #cfdcee;border-radius:9px;padding:6px 14px}.jc-btn:hover{background:var(--c);color:#fff;border-color:var(--c)}"
+    . ".jsum{background:#fff;border:1px solid var(--b);border-radius:16px;padding:20px;margin:14px 0 22px;box-shadow:0 2px 8px rgba(16,24,40,.05)}"
+    . ".jsum-h{display:flex;gap:14px;align-items:center;margin-bottom:12px}.jsum-h .jc-logo{flex-basis:52px;height:52px;font-size:1.35rem}.jsum-h b{display:block;font-size:1.05rem;color:#0f1b2d}.jsum-h span{font-size:.85rem;color:var(--m)}"
+    . ".jsum-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px 18px;margin:14px 0 18px}.jsum-g div{background:var(--s);border-radius:10px;padding:10px 12px}.jsum-g dt{font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--m);font-weight:650}.jsum-g dd{margin:2px 0 0;font-weight:600;font-size:.95rem}"
+    . ".jbtn{display:inline-block;background:var(--c);color:#fff!important;font-weight:700;padding:13px 24px;border-radius:10px;text-decoration:none;box-shadow:0 4px 14px rgba(0,85,164,.25)}.jbtn:hover{background:#00468a}"
+    . ".jdesc{background:#fff;border:1px solid var(--b);border-radius:16px;padding:6px 22px 18px}.jdesc h2{border:0;margin-top:1em}"
+    . ".jobs .cnt a,.jobs .cnt span{background:#fff;border:1px solid var(--b);border-radius:999px}.jobs .cnt a:hover{border-color:var(--c);color:var(--c)}.jobs .cnt b{color:var(--c)}"
+    . ".jobs .kpi>div{background:#fff;border:1px solid var(--b);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04)}.jobs .kpi b{color:var(--c)}"
+    . ".jobs .jhome{background:linear-gradient(135deg,#f0f6fd 0%,#eafaf7 100%);border:1px solid #dfe9f5;border-radius:20px;padding:26px 26px 18px}"
+    . ".jobs .jhome h1{margin-top:0}.jobs .jhome form input{background:#fff}.jobs .jhome form button{box-shadow:0 4px 14px rgba(0,85,164,.25)}"
+    . ".jhome-stats{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 4px}.jhome-stats div{background:#fff;border:1px solid #dfe9f5;border-radius:12px;padding:8px 14px;font-size:.9rem;color:var(--m)}.jhome-stats b{display:block;font-size:1.25rem;color:var(--c);font-weight:800}"
+    . ".jobs table th{background:var(--s)}.jobs .box{border-radius:14px}"
+    . "@media(max-width:700px){.jobs .jhome{padding:18px 16px 12px;border-radius:14px}.jsum{padding:16px}.jdesc{padding:4px 16px 14px}.jbtn{display:block;text-align:center}}";
 }
