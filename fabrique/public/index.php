@@ -48,6 +48,7 @@ switch ($path) {
 if (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) { out_sitemap_posts($site, (int)$m[1]); exit; }
 if ($site['jobs'] && preg_match('#^/sitemap-jobs-(\d+)\.xml$#', $path, $m)) { out_sitemap_jobs($site, (int)$m[1]); exit; }
 if ($site['jobs'] && $path === '/sitemap-metiers.xml') { out_sitemap_metiers($site); exit; }
+if ($site['jobs'] && $path === '/llms.txt') { out_llms_txt($site); }
 if ($site['jobs'] && $path === '/sitemap-priorite.xml') { out_sitemap_priority($site); exit; }
 if (!empty($site['commune']) && preg_match('#^/sitemap-communes-(\d+)\.xml$#', $path, $m)) { out_sitemap_communes($site, (int)$m[1]); exit; }
 if (!empty($site['dpe']) && $path === '/sitemap-dpe.xml') { out_sitemap_dpe($site); exit; }
@@ -143,6 +144,7 @@ function route(array $site, string $path): ?string
             if (empty($m[2]) || $reg) return page_intent($site, $m[1], $reg, max(1, (int)($m[3] ?? 1)));
         }
         if ($path === '/emploi/') return page_metiers_index($site);
+        if ($path === '/barometre-emploi/') return page_barometre($site);
         if ($path === '/salaire/') return page_salaires_index($site);
         if (preg_match('#^/salaire/([a-z0-9\-]+)/$#', $path, $m)) return page_salaire($site, $m[1]);
         if (preg_match('#^/emploi/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m)) return page_metier($site, $m[1], $m[2] ?? '');
