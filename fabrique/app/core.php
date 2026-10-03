@@ -23,7 +23,7 @@ function pdo_open(string $file): PDO
     $new = !is_file($file);
     if ($new && !is_dir(dirname($file))) mkdir(dirname($file), 0750, true);
     $db = new PDO('sqlite:' . $file, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-    $db->exec('PRAGMA busy_timeout=8000; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;');
+    $db->exec('PRAGMA busy_timeout=8000; PRAGMA synchronous=NORMAL;'); if (strtolower((string)$db->query('PRAGMA journal_mode')->fetchColumn()) !== 'wal') $db->exec('PRAGMA journal_mode=WAL'); // ne redemande pas le mode WAL à chaque connexion (« database is locked » pendant les écritures)
     return $db;
 }
 
