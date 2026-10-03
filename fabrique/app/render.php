@@ -205,7 +205,11 @@ function page_home(array $site, int $page): string
         'title' => $site['name'] . ($page > 1 ? " — page $page" : ' — ' . $site['tagline']), 'desc' => $site['tagline'] . '. ' . mb_strimwidth((string)$site['niche'], 0, 120, '…'),
         'canonical' => $url,
         'schema' => [['@context' => 'https://schema.org', '@type' => 'WebSite', 'name' => $site['name'], 'url' => 'https://' . $site['host'] . '/',
-            'potentialAction' => ['@type' => 'SearchAction', 'target' => 'https://' . $site['host'] . '/recherche/?q={q}', 'query-input' => 'required name=q']]],
+            'alternateName' => $site['host'], 'inLanguage' => 'fr-FR', 'publisher' => ['@id' => 'https://' . $site['host'] . '/#organization'],
+            'potentialAction' => ['@type' => 'SearchAction', 'target' => 'https://' . $site['host'] . (!empty($site['jobs']) ? '/chercher/?q={q}' : '/recherche/?q={q}'), 'query-input' => 'required name=q']],
+            array_filter(['@context' => 'https://schema.org', '@type' => 'Organization', '@id' => 'https://' . $site['host'] . '/#organization', 'name' => $site['name'], 'url' => 'https://' . $site['host'] . '/',
+                'logo' => ($lg = setting('logo:' . $site['host'], '')) ? ['@type' => 'ImageObject', 'url' => 'https://' . $site['host'] . strtok($lg, '?'), 'width' => 577, 'height' => 140] : null,
+                'description' => $site['tagline'] ?: null, 'email' => setting('contact_email', '') ?: null, 'areaServed' => !empty($site['jobs']) ? 'FR' : null])],
     ], $body);
 }
 
