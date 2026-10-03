@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 // Robots sans intérêt qui exécutent le JavaScript (pages vues et impressions publicitaires fictives, risque AdSense) :
 // robot d'entraînement IA de Meta et signature du botnet de septembre. Les robots de recherche restent autorisés.
-if (preg_match('#meta-externalagent|Chrome/133\.0\.6943\.141 Safari/537\.36$#i', (string)($_SERVER['HTTP_USER_AGENT'] ?? ''))) { http_response_code(403); header('Content-Type: text/plain'); exit('Forbidden'); }
+if (preg_match('#meta-externalagent|Baiduspider|Chrome/133\.0\.6943\.141 Safari/537\.36$#i', (string)($_SERVER['HTTP_USER_AGENT'] ?? '')) || preg_match('#^(116\.179\.|220\.181\.108\.|111\.225\.)#', (string)($_SERVER['REMOTE_ADDR'] ?? ''))) { http_response_code(403); header('Content-Type: text/plain'); exit('Forbidden'); } // + Baidu : robots qui exécutent le JS, aucun visiteur français
 
 require dirname(__DIR__) . '/app/core.php';
 require dirname(__DIR__) . '/app/render.php';
