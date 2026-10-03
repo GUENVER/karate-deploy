@@ -92,7 +92,7 @@ function layout(array $site, array $m, string $body): string
               . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></header>')
         . '<main class="w">' . $body . '</main>'
         . '<footer class="bot"><div class="w"><p><strong>' . h($site['name']) . '</strong> — ' . h($site['tagline']) . '</p>'
-        . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a>' . (!empty($site['jobs']) ? '<a href="/nos-sources/">Nos sources</a>' : '') . '<a href="/confidentialite/">Confidentialité</a><a href="/plan-du-site/">Plan du site</a></p>'
+        . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a>' . (!empty($site['jobs']) ? '<a href="/nos-sources/">Nos sources</a><a href="/barometre-emploi/">Baromètre de l\'emploi</a>' : '') . '<a href="/confidentialite/">Confidentialité</a><a href="/plan-du-site/">Plan du site</a></p>'
         . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer><script>setTimeout(function(){var d=new FormData();d.append("p",location.pathname);navigator.sendBeacon("/_pv",d)},1500)</script></body></html>';
 }
 
@@ -113,7 +113,7 @@ function jobs_menu_build(array $site): string
     $counts = [];
     foreach ($db->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
     $hasCsp = (bool)$db->query("SELECT 1 FROM jobs WHERE status='open' AND id LIKE 'csp-%' LIMIT 1")->fetchColumn();
-    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($hasCsp ? '<a href="/emploi-public/"><strong>Emploi public</strong></a>' : '<span></span>') . '<a href="/emploi/"><strong>Offres par métier</strong></a><a href="/salaire/"><strong>Salaires par métier</strong></a><b>Par région</b>';
+    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($hasCsp ? '<a href="/emploi-public/"><strong>Emploi public</strong></a>' : '<span></span>') . '<a href="/emploi/"><strong>Offres par métier</strong></a><a href="/salaire/"><strong>Salaires par métier</strong></a><a href="/barometre-emploi/"><strong>Baromètre de l\'emploi</strong></a><span></span><b>Par région</b>';
     foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $o .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . '</a>';
     try { $cities = $db->query('SELECT slug, name FROM job_cities ORDER BY n DESC LIMIT 12')->fetchAll(); } catch (Throwable $e) { $cities = []; }
     if ($cities) { $o .= '<b>Grandes villes</b>'; foreach ($cities as $c) $o .= '<a href="/offres-emploi/ville/' . h($c['slug']) . '/">' . h($c['name']) . '</a>'; }
