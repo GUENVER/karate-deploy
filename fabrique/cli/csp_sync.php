@@ -103,7 +103,7 @@ foreach ($ups as $h => [$db]) {
     $db->exec("UPDATE jobs SET status='closed' WHERE status='open' AND id IN (SELECT id FROM csp_meta WHERE deadline<>'' AND deadline<date('now'))");
     $open = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn();
     if ($done) {
-        cache_clear($h);
+        if ((int)setting('csp_last_clear', '0') < time() - 10800) { cache_clear($h); setting_set('csp_last_clear', (string)time()); } // au plus toutes les 3 h (charge serveur)
         $site = registry()->query('SELECT * FROM sites WHERE host=' . $db->quote($h))->fetch();
         foreach (array_chunk(array_map(fn($s) => "https://$h/offre/$s/", $urls), 5000) as $c) indexnow_ping($site, $c);
     }
