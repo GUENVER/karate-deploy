@@ -296,9 +296,36 @@ function job_url(array $j): string { return '/offre/' . $j['slug'] . '/'; }
 
 function job_card(array $j): string
 {
-    $meta = array_filter([$j['company'], $j['city'], $j['contract_label'] ?: (JOB_CONTRACTS[$j['contract']] ?? ''), $j['salary']]);
-    return '<div class="card"><div class="in"><span class="kick">' . h(JOB_CONTRACTS[$j['contract']] ?? 'Offre') . '</span><h3><a href="' . h(job_url($j)) . '">' . h($j['title']) . '</a></h3>'
-        . '<p>' . h(implode(' · ', $meta)) . '</p><p><small>Publiée le ' . h(date_fr($j['created_at'])) . '</small></p></div></div>';
+    $co = trim((string)$j['company']);
+    $coShort = preg_replace('/\s+—\s+.*$/u', '', $co);
+    $ini = mb_strtoupper(mb_substr(preg_replace('/^(la |le |les |l\'|sas |sarl )/iu', '', $coShort) ?: (string)$j['title'], 0, 1));
+    $hue = hexdec(substr(md5($coShort ?: (string)$j['title']), 0, 2)) * 360 / 255;
+    $ck = (string)$j['contract'];
+    $tags = '<span class="tag t-' . h($ck ?: 'autre') . '">' . h(JOB_CONTRACTS[$ck] ?? 'Offre') . '</span>';
+    if (str_starts_with((string)$j['id'], 'csp-')) $tags .= '<span class="tag t-pub">Emploi public</span>';
+    if (($s = job_salary((string)$j['salary'])) && ($m = job_salary_monthly($s)) > 900 && $m < 20000) $tags .= '<span class="tag t-sal">' . number_format(round($m / 10) * 10, 0, ',', ' ') . ' €/mois</span>';
+    $loc = trim((string)$j['city']) ?: (preg_match('/—\s*(.+)$/u', $co, $mm) ? $mm[1] : '');
+    return '<div class="card jc"><div class="in"><div class="jc-h"><span class="jc-logo" style="background:hsl(' . (int)$hue . ',55%,42%)" aria-hidden="true">' . h($ini) . '</span><div class="jc-t">'
+        . '<h3><a href="' . h(job_url($j)) . '">' . h($j['title']) . '</a></h3>' . ($coShort !== '' ? '<p class="jc-co">' . h($coShort) . '</p>' : '') . '</div></div>'
+        . '<div class="jc-tags">' . $tags . '</div>'
+        . '<p class="jc-meta">' . ($loc !== '' ? '<span>' . ICO_PIN . h($loc) . '</span>' : '') . '<span>' . ICO_CLOCK . h(job_ago((string)$j['created_at'])) . '</span></p>'
+        . '<a class="jc-btn" href="' . h(job_url($j)) . '" tabindex="-1" aria-hidden="true">Voir l\'offre</a></div></div>';
+}
+
+const ICO_PIN = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>';
+const ICO_CLOCK = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 10.4V6h-2v7.2l5.2 3.1 1-1.7z"/></svg>';
+const ICO_EUR = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M15 18.5A6.5 6.5 0 0 1 9.2 15H15l1-2H8.6a6 6 0 0 1 0-2H17l1-2H9.2A6.5 6.5 0 0 1 15 5.5c1.6 0 3.1.6 4.2 1.6L21 5.3A9 9 0 0 0 6.6 9H3l-1 2h4.1a9 9 0 0 0 0 2H3l-1 2h4.6A9 9 0 0 0 21 18.7l-1.8-1.8a6.5 6.5 0 0 1-4.2 1.6z"/></svg>';
+const ICO_BAG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M10 3h4a2 2 0 0 1 2 2v2h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4V5a2 2 0 0 1 2-2zm4 4V5h-4v2h4z"/></svg>';
+
+// « il y a 3 h », « il y a 2 jours », sinon la date
+function job_ago(string $dt): string
+{
+    $d = time() - (int)strtotime($dt . ' UTC');
+    if ($d < 0) $d = 0;
+    if ($d < 3600) return 'il y a ' . max(1, intdiv($d, 60)) . ' min';
+    if ($d < 86400) return 'il y a ' . intdiv($d, 3600) . ' h';
+    if ($d < 8 * 86400) { $n = intdiv($d, 86400); return 'il y a ' . $n . ' jour' . ($n > 1 ? 's' : ''); }
+    return 'le ' . date_fr($dt);
 }
 
 function jobs_disclaimer(): string
@@ -537,9 +564,8 @@ function page_job(array $site, string $slug): ?string
         . ($city ? ' › <a href="/offres-emploi/ville/' . h($city['slug']) . '/">' . h($city['name']) . '</a>' : '') . '</p>'
         . '<h1>' . h($j['title']) . '</h1>'
         . ($closed ? '<p class="lead">Cette offre n\'est plus disponible. Voici des offres similaires encore ouvertes.</p>' . $simHtml . $cityHtml . job_ad($site) : '')
-        . '<table>' . implode('', array_map(fn($k, $v) => '<tr><th>' . h($k) . '</th><td>' . h($v) . '</td></tr>', array_keys($facts), $facts)) . '</table>'
-        . ($closed ? '' : '<p><a class="btn" style="background:var(--c);color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:700" href="' . h($j['url']) . '" rel="' . $rel . '" target="_blank">Postuler sur le site de l\'offre</a></p>')
-        . ($desc !== '' ? '<h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div>' : '')
+        . job_summary($j, $facts, $closed ? '' : $rel)
+        . ($desc !== '' ? '<section class="jdesc"><h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div></section>' : '')
         . '<p class="disc">Source : ' . h($j['src']) . ($j['src'] === 'Adzuna' ? ' — Jobs by Adzuna' : '') . '. Publiée le ' . h(date_fr($j['created_at'])) . '.</p>'
         . ($closed ? '' : job_ad($site) . (function_exists('metier_links_for_job') ? metier_links_for_job($site, $j) . metier_similar_for_job($site, $j) : '') . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
         . '</article><aside><div class="box"><h4>Préparer sa candidature</h4><ul>'
@@ -599,4 +625,20 @@ function out_sitemap_jobs(array $site, int $i): void
 function jobs_sitemap_count(array $site): int
 {
     return (int)ceil(max(1, (int)jobs_db($site['host'])->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND " . JOB_INDEXABLE_SQL)->fetchColumn()) / 1000);
+}
+
+// Encadré récapitulatif en tête de fiche offre (entreprise, étiquettes, informations clés, bouton Postuler).
+function job_summary(array $j, array $facts, string $rel): string
+{
+    $co = preg_replace('/\s+—\s+.*$/u', '', trim((string)$j['company']));
+    $ini = mb_strtoupper(mb_substr($co ?: (string)$j['title'], 0, 1));
+    $hue = hexdec(substr(md5($co ?: (string)$j['title']), 0, 2)) * 360 / 255;
+    $ck = (string)$j['contract'];
+    $tags = '<span class="tag t-' . h($ck ?: 'autre') . '">' . h(JOB_CONTRACTS[$ck] ?? 'Offre') . '</span>' . (str_starts_with((string)$j['id'], 'csp-') ? '<span class="tag t-pub">Emploi public</span>' : '');
+    $dl = '';
+    foreach ($facts as $k => $v) if ($v !== '' && $v !== null) $dl .= '<div><dt>' . h($k) . '</dt><dd>' . h((string)$v) . '</dd></div>';
+    return '<div class="jsum"><div class="jsum-h"><span class="jc-logo" style="background:hsl(' . (int)$hue . ',55%,42%)" aria-hidden="true">' . h($ini) . '</span><div>'
+        . ($co !== '' ? '<b>' . h($co) . '</b>' : '<b>Entreprise non communiquée</b>') . '<span>' . ICO_CLOCK . 'Publiée ' . h(job_ago((string)$j['created_at'])) . '</span></div></div>'
+        . '<div class="jc-tags">' . $tags . '</div><dl class="jsum-g">' . $dl . '</dl>'
+        . ($rel !== '' ? '<a class="jbtn" href="' . h($j['url']) . '" rel="' . $rel . '" target="_blank">Postuler sur le site de l\'offre →</a>' : '') . '</div>';
 }
