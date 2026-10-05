@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 // Robots sans intérêt qui exécutent le JavaScript (pages vues et impressions publicitaires fictives, risque AdSense) :
 // robot d'entraînement IA de Meta et signature du botnet de septembre. Les robots de recherche restent autorisés.
-if (preg_match('#meta-externalagent|Baiduspider|Chrome/133\.0\.6943\.141 Safari/537\.36$#i', (string)($_SERVER['HTTP_USER_AGENT'] ?? '')) || preg_match('#^(116\.179\.|220\.181\.108\.|111\.225\.)#', (string)($_SERVER['REMOTE_ADDR'] ?? ''))) { http_response_code(403); header('Content-Type: text/plain'); exit('Forbidden'); } // + Baidu : robots qui exécutent le JS, aucun visiteur français
+if (preg_match('#meta-externalagent|Baiduspider|Chrome/133\.0\.6943\.141 Safari/537\.36$#i', (string)($_SERVER['HTTP_USER_AGENT'] ?? '')) || preg_match('#^(116\.179\.|220\.181\.108\.|111\.225\.|144\.225\.|57\.141\.)#', (string)($_SERVER['REMOTE_ADDR'] ?? ''))) { http_response_code(403); header('Content-Type: text/plain'); exit('Forbidden'); } // + Baidu : robots qui exécutent le JS, aucun visiteur français
 
 require dirname(__DIR__) . '/app/core.php';
 require dirname(__DIR__) . '/app/render.php';
@@ -15,6 +15,7 @@ require dirname(__DIR__) . '/app/lba_blocks.php';
 require dirname(__DIR__) . '/app/csp.php';
 require dirname(__DIR__) . '/app/fr_map.php';
 require dirname(__DIR__) . '/app/metiers.php';
+require dirname(__DIR__) . '/app/recruteurs.php';
 require dirname(__DIR__) . '/app/fuel.php';
 require dirname(__DIR__) . '/app/ev.php';
 require dirname(__DIR__) . '/app/places.php';
@@ -33,6 +34,7 @@ if (!$site || $site['status'] === 'deleted') { http_response_code(404); echo 'Si
 
 // ads.txt servi tel quel sur chaque alias (le robot AdSense le lit à la racine du domaine, sans redirection)
 if ($path === '/ads.txt') { out_ads_txt(); exit; }
+if ($path === '/google6db13020cf1e8760.html') { header('Content-Type: text/html; charset=utf-8'); echo 'google-site-verification: google6db13020cf1e8760.html'; exit; } // vérif Search Console du compte de service rank-tracker
 
 // www / alias -> hôte canonique
 if ($host !== $site['host']) { header('Location: https://' . $site['host'] . ($_SERVER['REQUEST_URI'] ?? '/'), true, 301); exit; }
@@ -47,7 +49,8 @@ switch ($path) {
 }
 if (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) { out_sitemap_posts($site, (int)$m[1]); exit; }
 if ($site['jobs'] && preg_match('#^/sitemap-jobs-(\d+)\.xml$#', $path, $m)) { out_sitemap_jobs($site, (int)$m[1]); exit; }
-if ($site['jobs'] && $path === '/sitemap-metiers.xml') { out_sitemap_metiers($site); exit; }
+if ($site['jobs'] && $path === '/sitemap-metiers.xml') { xml_cached($site, 'sitemap-metiers', 21600, fn() => out_sitemap_metiers($site)); exit; }
+if ($site['jobs'] && $path === '/sitemap-recruteurs.xml') { xml_cached($site, 'sitemap-recruteurs', 21600, fn() => out_sitemap_companies($site)); exit; }
 if ($site['jobs'] && $path === '/llms.txt') { out_llms_txt($site); }
 if ($site['jobs'] && $path === '/sitemap-priorite.xml') { out_sitemap_priority($site); exit; }
 if (!empty($site['commune']) && preg_match('#^/sitemap-communes-(\d+)\.xml$#', $path, $m)) { out_sitemap_communes($site, (int)$m[1]); exit; }
@@ -139,6 +142,9 @@ function route(array $site, string $path): ?string
             return page_jobs_region($site, $reg, max(1, (int)($m[2] ?? 1)), isset(JOB_CONTRACTS[$c]) ? $c : '');
         }
         if (preg_match('#^/(localisation|region)/#', $path) && ($to = legacy_job_redirect($site, $path))) { header('Location: ' . $to, true, 301); return null; }
+        if (($to = legacy_offre_redirect($site, $path)) !== null) { header('Location: ' . $to, true, 301); return null; } // anciennes URL WordPress /offre-d-emploi/…
+        if ($path === '/recruteur/') return page_companies_index($site);
+        if (preg_match('#^/recruteur/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m)) { $h = page_company($site, $m[1], $m[2] ?? ''); return $h === 'REDIRECT' ? null : $h; }
         if (preg_match('#^/(emploi-sans-diplome|emploi-debutant|job-etudiant|job-week-end|emploi-teletravail|emploi-temps-partiel|emploi-urgent)/(?:([a-z\-]+)/)?(?:page/(\d+)/)?$#', $path, $m)) {
             $reg = !empty($m[2]) ? region_by_slug($m[2]) : null;
             if (empty($m[2]) || $reg) return page_intent($site, $m[1], $reg, max(1, (int)($m[3] ?? 1)));
