@@ -17,6 +17,18 @@ function out_ads_txt(): void
 
 function out_sitemap_index(array $site): void
 {
+    // cache 6 h : les comptages (offres, communes…) sont lourds et l'index est demandé en boucle par les robots
+    $cf = dirname(__DIR__) . '/data/cache/' . $site['host'] . '.sitemap-index.xml';
+    if (is_file($cf) && filemtime($cf) > time() - 21600) { header('Content-Type: application/xml; charset=utf-8'); readfile($cf); return; }
+    $lk = @fopen($cf . '.lock', 'c');
+    if ($lk && !flock($lk, LOCK_EX | LOCK_NB) && is_file($cf)) { header('Content-Type: application/xml; charset=utf-8'); readfile($cf); return; } // une seule régénération à la fois, les autres reçoivent l'ancienne version
+    ignore_user_abort(true); set_time_limit(600);
+    ob_start(); out_sitemap_index_build($site); $x = ob_get_clean();
+    @file_put_contents($cf, $x, LOCK_EX); if ($lk) { flock($lk, LOCK_UN); fclose($lk); } header('Content-Type: application/xml; charset=utf-8'); echo $x;
+}
+
+function out_sitemap_index_build(array $site): void
+{
     $n = (int)site_db($site['host'])->query("SELECT COUNT(*) FROM posts WHERE status='publish'")->fetchColumn();
     header('Content-Type: application/xml; charset=utf-8');
     echo '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
@@ -29,6 +41,7 @@ function out_sitemap_index(array $site): void
     if (!empty($site['ev'])) for ($i = 1; $i <= ev_sitemap_count($site); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-bornes-$i.xml</loc></sitemap>";
     if (!empty($site['jobs'])) for ($i = 1; $i <= jobs_sitemap_count($site); $i++) echo '<sitemap><loc>https://' . $site['host'] . "/sitemap-jobs-$i.xml</loc></sitemap>";
     if (!empty($site['jobs'])) echo '<sitemap><loc>https://' . $site['host'] . '/sitemap-metiers.xml</loc></sitemap>';
+    if (!empty($site['jobs'])) echo '<sitemap><loc>https://' . $site['host'] . '/sitemap-recruteurs.xml</loc></sitemap>';
     echo '</sitemapindex>';
 }
 
