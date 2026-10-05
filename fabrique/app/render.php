@@ -113,7 +113,7 @@ function jobs_menu_build(array $site): string
     $counts = [];
     foreach ($db->query("SELECT region, COUNT(*) n FROM jobs WHERE status='open' GROUP BY region") as $r) $counts[$r['region']] = (int)$r['n'];
     $hasCsp = (bool)$db->query("SELECT 1 FROM jobs WHERE status='open' AND id LIKE 'csp-%' LIMIT 1")->fetchColumn();
-    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($hasCsp ? '<a href="/emploi-public/"><strong>Emploi public</strong></a>' : '<span></span>') . '<a href="/emploi/"><strong>Offres par métier</strong></a><a href="/salaire/"><strong>Salaires par métier</strong></a><a href="/barometre-emploi/"><strong>Baromètre de l\'emploi</strong></a><span></span><b>Par région</b>';
+    $o = '<a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($hasCsp ? '<a href="/emploi-public/"><strong>Emploi public</strong></a>' : '<span></span>') . '<a href="/emploi/"><strong>Offres par métier</strong></a><a href="/salaire/"><strong>Salaires par métier</strong></a><a href="/barometre-emploi/"><strong>Baromètre de l\'emploi</strong></a><a href="/recruteur/"><strong>Entreprises qui recrutent</strong></a><b>Par région</b>';
     foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $o .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . '</a>';
     try { $cities = $db->query('SELECT slug, name FROM job_cities ORDER BY n DESC LIMIT 12')->fetchAll(); } catch (Throwable $e) { $cities = []; }
     if ($cities) { $o .= '<b>Grandes villes</b>'; foreach ($cities as $c) $o .= '<a href="/offres-emploi/ville/' . h($c['slug']) . '/">' . h($c['name']) . '</a>'; }
@@ -454,6 +454,7 @@ function page_plan(array $site): string
         $jl = [['Toutes les offres d\'emploi', '/offres-emploi/', array_sum($counts)]];
         if (function_exists('csp_tables') && ($np = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn())) $jl[] = ['Emploi public', '/emploi-public/', $np];
         if (function_exists('metier_tables')) { metier_tables($db); $jl[] = ['Offres par métier', '/emploi/', (int)$db->query('SELECT COUNT(*) FROM job_metiers')->fetchColumn()]; }
+        if (function_exists('companies_ready')) { companies_ready($db); $jl[] = ['Entreprises qui recrutent', '/recruteur/', (int)$db->query('SELECT COUNT(*) FROM job_companies WHERE n > 0')->fetchColumn()]; }
         $b .= '<h2>Offres d\'emploi</h2>' . $li($jl);
         $rl = []; foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $rl[] = ['Emploi ' . $name, '/offres-emploi/' . $slug . '/', $counts[$code]];
         $b .= '<h2>Par région</h2>' . $li($rl);
