@@ -157,10 +157,10 @@ function page_metier(array $site, string $mslug, string $cslug = ''): string
         $body .= '<p><a href="/offres-emploi/ville/' . h($cslug) . '/">Toutes les offres d\'emploi à ' . h($city['name']) . '</a> · <a href="/emploi/' . h($mslug) . '/">' . h($name) . ' : toute la France</a></p>';
     }
     $emp = []; foreach ($all as $j) if ($j['company'] !== '' && !str_contains($j['company'], '—')) $emp[$j['company']] = ($emp[$j['company']] ?? 0) + 1; arsort($emp);
-    if (count($emp) >= 3) $body .= '<h2>Employeurs qui recrutent</h2>' . count_chips(array_map(fn($k, $v) => [$k, $v, ''], array_slice(array_keys($emp), 0, 12), array_slice($emp, 0, 12)));
+    if (count($emp) >= 3) $body .= '<h2>Employeurs qui recrutent</h2>' . count_chips(array_map(fn($k, $v) => [company_display($k), $v, company_is_real($k) ? '/recruteur/' . company_slug($k) . '/' : ''], array_slice(array_keys($emp), 0, 12), array_slice($emp, 0, 12)));
     $st = $db->prepare('SELECT 1 FROM job_metier_sal WHERE slug=?'); $st->execute([$mslug]);
     if ($st->fetchColumn()) $body .= '<p><a href="/salaire/' . h($mslug) . '/"><strong>Salaire ' . h($lname) . ' : détail par région et par contrat →</strong></a></p>';
-    $body .= '<h2>Dernières offres ' . h(metier_de($lname)) . h($where_) . '</h2><div class="grid">' . implode('', array_map('job_card', array_slice($all, 0, 30))) . '</div>';
+    $body .= '<h2>Dernières offres ' . h(metier_de($lname)) . h($where_) . '</h2>' . job_grid($site, array_slice($all, 0, 30));
     if (!$city) $body .= metier_formations_html(metier_formations($db, $mslug, $name), $name);
     $faq = [['Combien d\'offres d\'emploi ' . metier_de($lname) . $where_ . ' ?', $nf($n) . ' offres sont ouvertes aujourd\'hui sur ' . $site['name'] . ', mises à jour plusieurs fois par jour.']];
     if ($sal) $faq[] = ['Quel salaire pour un ' . $lname . $where_ . ' ?', 'Sur ' . $sal['n'] . ' offres indiquant un salaire, la rémunération médiane est de ' . metier_fmt_eur($sal['med']) . ' brut par mois ; la moitié des offres se situe entre ' . metier_fmt_eur($sal['p25']) . ' et ' . metier_fmt_eur($sal['p75']) . '.'];
@@ -534,6 +534,9 @@ function out_llms_txt(array $site): void
     foreach (JOB_INTENTS as $k => [$l]) echo "- [$l]($b/$k/)\n";
     echo "\n## Métiers qui recrutent le plus\n";
     foreach ($db->query('SELECT slug, name, n FROM job_metiers ORDER BY n DESC LIMIT 30') as $m) echo "- [{$m['name']}]($b/emploi/{$m['slug']}/) : {$m['n']} offres\n";
+    echo "\n## Entreprises qui recrutent\n- [Toutes les entreprises]({$b}/recruteur/) : offres ouvertes par employeur, villes, contrats\n";
+    try { foreach ($db->query('SELECT slug, name, n FROM job_companies WHERE n > 0 ORDER BY n DESC LIMIT 25') as $c) echo "- [" . company_display($c['name']) . "]($b/recruteur/{$c['slug']}/) : {$c['n']} offres\n"; } catch (Throwable $e) {}
+    echo "\n## Chiffres du marché\n- [Baromètre mensuel de l'emploi]($b/barometre-emploi/) : volumes d'offres par région, contrat et métier, salaires médians, mis à jour chaque mois\n";
     echo "\n## Sources et méthode\n- [Nos sources]($b/nos-sources/)\n- Données dédoublonnées ; offres expirées retirées automatiquement. Citation autorisée avec mention de la source ({$site['host']}).\n";
     exit;
 }
