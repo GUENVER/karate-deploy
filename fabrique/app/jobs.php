@@ -201,10 +201,13 @@ function jobs_sync(array $site, callable $log): array
     $st = $db->prepare("SELECT slug FROM jobs WHERE status='open' AND rowid > ?"); $st->execute([$maxRow]);
     $fresh = $st->fetchAll(PDO::FETCH_COLUMN);
     $cities = jobs_cities_build($db);
-    cache_clear($site['host']);
+    $companies = companies_build($db);
+    $cache = jobs_cache_refresh($site, $db); // on garde les fiches d'offres ouvertes en cache, on purge le reste
+    foreach (glob(cfg('data_dir') . '/cache/' . $site['host'] . '.*.xml') ?: [] as $f) @unlink($f); // sitemaps
     $pinged = jobs_indexnow($site, $db, $fresh, $closing);
+    $warm = jobs_cache_warm($site);
     return ['upserted' => $n, 'open' => (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open'")->fetchColumn(),
-        'new' => count($fresh), 'closed' => count($closing), 'cities' => $cities, 'indexnow' => $pinged];
+        'new' => count($fresh), 'closed' => count($closing), 'cities' => $cities, 'companies' => $companies, 'cache' => $cache, 'warmed' => $warm, 'indexnow' => $pinged];
 }
 
 // Signale à IndexNow (Bing, Yandex… ; Bing alimente la recherche de ChatGPT) les URL qui ont changé.
@@ -216,6 +219,8 @@ function jobs_indexnow(array $site, PDO $db, array $fresh, array $closed): int
     foreach (JOB_REGIONS as [$s]) $urls[] = $b . '/offres-emploi/' . $s . '/';
     foreach ($db->query('SELECT slug FROM job_cities') as $r) $urls[] = $b . '/offres-emploi/ville/' . $r['slug'] . '/';
     foreach (array_merge($fresh, $closed) as $s) $urls[] = $b . '/offre/' . $s . '/';
+    $urls[] = $b . '/recruteur/';
+    try { foreach ($db->query('SELECT slug FROM job_companies WHERE n > 0 ORDER BY n DESC LIMIT 300') as $r) $urls[] = $b . '/recruteur/' . $r['slug'] . '/'; } catch (Throwable $e) {}
     $urls = array_values(array_unique($urls));
     foreach (array_chunk($urls, 10000) as $chunk) { try { indexnow_ping($site, $chunk); } catch (Throwable $e) {} }
     return count($urls);
@@ -394,7 +399,7 @@ function page_jobs_region(array $site, array $reg, int $page, string $contract):
     $title = 'Offres d\'emploi ' . $reg['name'] . ($contract ? ' en ' . JOB_CONTRACTS[$contract] : '');
     $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/offres-emploi/">Offres d\'emploi</a> › ' . h($reg['name']) . '</p>'
         . '<h1>' . h($title) . '</h1><p>' . number_format($total, 0, ',', ' ') . ' offres d\'emploi en ' . h($reg['name']) . ', mises à jour plusieurs fois par jour. Villes qui recrutent le plus : ' . $cities . '.</p>'
-        . $chips . '<div class="grid">' . implode('', array_map('job_card', $jobs)) . '</div>'
+        . $chips . job_grid($site, $jobs)
         . pager($base, $page, (int)ceil($total / $per))
         . ($guides ? '<h2>Nos conseils pour décrocher le poste</h2><ul>' . implode('', array_map(fn($g) => '<li><a href="' . h($g['path']) . '">' . h($g['title']) . '</a></li>', $guides)) . '</ul>' : '')
         . careerjet_slot($site, $contract ? JOB_CONTRACTS[$contract] : '', $reg['name'])
@@ -476,9 +481,9 @@ function page_jobs_city(array $site, string $slug): string
         . '<h2>Le marché de l\'emploi à ' . h($name) . ' en chiffres</h2>' . $tbl($facts)
         . '<h2>Types de contrat</h2>' . $tbl(array_combine(array_map(fn($k) => JOB_CONTRACTS[$k] ?? $k, array_keys($contracts)), array_map(fn($v) => $nf($v) . ' offres (' . $pct($v) . ' %)', $contracts)))
         . ($sectors ? '<h2>Secteurs qui recrutent à ' . h($name) . '</h2>' . $tbl(array_map(fn($v) => $nf($v) . ' offres', $sectors)) : '')
-        . ($companies ? '<h2>Employeurs qui publient le plus d\'offres</h2>' . $tbl(array_map(fn($v) => $nf($v) . ' offres', $companies)) : '')
+        . ($companies ? '<h2>Employeurs qui recrutent à ' . h($name) . '</h2>' . count_chips(array_map(fn($k, $v) => [company_display($k), $v, company_is_real($k) ? '/recruteur/' . company_slug($k) . '/' : ''], array_keys($companies), $companies)) : '')
         . job_ad($site)
-        . '<h2>Dernières offres d\'emploi à ' . h($name) . '</h2><div class="grid">' . implode('', array_map('job_card', array_slice($jobs, 0, 30))) . '</div>'
+        . '<h2>Dernières offres d\'emploi à ' . h($name) . '</h2>' . job_grid($site, array_slice($jobs, 0, 30))
         . '<p><a href="/offres-emploi/' . h($reg[0]) . '/">Toutes les offres d\'emploi en ' . h($reg[1]) . '</a></p>'
         . '<h2>Questions fréquentes</h2>' . implode('', array_map(fn($f) => '<h3>' . h($f[0]) . '</h3><p>' . h($f[1]) . '</p>', $faq))
         . ($others ? '<h2>Autres villes qui recrutent en ' . h($reg[1]) . '</h2><p>' . city_links($others) . '.</p>' : '')
@@ -547,23 +552,28 @@ function page_job(array $site, string $slug): ?string
     $st = $db->prepare("SELECT * FROM jobs WHERE status='open' AND region=? AND id<>? ORDER BY (contract=?) DESC, created_at DESC LIMIT 6"); $st->execute([$j['region'], $j['id'], $j['contract']]);
     $similar = $st->fetchAll();
     $closed = $j['status'] !== 'open';
-    if ($closed && ($to = job_best_match($db, $j))) { // offre expirée : 301 vers l'offre ouverte la plus proche
+    $recent = $closed && strtotime((string)$j['seen_at']) > time() - 30 * 86400; // expirée depuis moins de 30 jours : la page reste en ligne (200) avec les offres proches
+    if ($closed && !$recent && ($to = job_best_match($db, $j))) { // offre expirée : 301 vers l'offre ouverte la plus proche
         $qs = (string)($_SERVER['QUERY_STRING'] ?? '');
         header('Location: /offre/' . $to . '/' . ($qs !== '' ? '?' . $qs : ''), true, 301);
         return null;
     }
-    if ($closed) http_response_code(410);
+    if ($closed && !$recent) http_response_code(410);
+    if ($recent) { $st = $db->prepare("SELECT * FROM jobs WHERE status='open' AND region=? AND id<>? ORDER BY (contract=?) DESC, created_at DESC LIMIT 12"); $st->execute([$j['region'], $j['id'], $j['contract']]); $similar = $st->fetchAll(); }
     $city = job_city_of($db, $j);
-    $facts = array_filter(['Entreprise' => $j['company'], 'Lieu' => trim($j['city'] . ' ' . $j['postal']), 'Contrat' => $j['contract_label'] ?: (JOB_CONTRACTS[$j['contract']] ?? ''),
+    $facts = array_filter(['Entreprise' => company_is_real((string)$j['company']) ? company_link((string)$j['company']) : $j['company'], 'Lieu' => trim($j['city'] . ' ' . $j['postal']), 'Contrat' => $j['contract_label'] ?: (JOB_CONTRACTS[$j['contract']] ?? ''),
         'Durée du travail' => $j['worktime'], 'Salaire' => $j['salary'], 'Expérience' => $j['experience'], 'Secteur' => $j['sector']]);
     $rel = $j['src'] === 'Adzuna' ? 'sponsored nofollow noopener' : 'nofollow noopener';
-    $simHtml = $similar ? '<h2>Offres similaires en ' . h($reg[1]) . '</h2><div class="grid">' . implode('', array_map('job_card', $similar)) . '</div>' : '';
+    $simHtml = $similar ? '<h2>Offres similaires en ' . h($reg[1]) . '</h2>' . job_grid($site, $similar, $recent) : '';
+    $salM = (($sx = job_salary((string)$j['salary'])) && ($mx = job_salary_monthly($sx)) > 900 && $mx < 20000) ? number_format(round($mx / 10) * 10, 0, ',', ' ') . ' €/mois' : '';
+    $ctr = JOB_CONTRACTS[$j['contract']] ?? '';
+    $seoTitle = mb_substr($j['title'], 0, 55) . ($ctr ? ' – ' . $ctr : '') . ($j['city'] !== '' ? ' à ' . $j['city'] : '') . ($salM ? ' – ' . $salM : '');
     $cityHtml = $city ? '<p><a href="/offres-emploi/ville/' . h($city['slug']) . '/">Toutes les offres d\'emploi à ' . h($city['name']) . '</a> (' . (int)$city['n'] . ' offres, salaires et secteurs qui recrutent)</p>' : '';
     $desc = trim((string)$j['description']);
     $body = '<div class="layout"><article><p class="crumbs"><a href="/offres-emploi/">Offres d\'emploi</a> › <a href="/offres-emploi/' . h($reg[0]) . '/">' . h($reg[1]) . '</a>'
         . ($city ? ' › <a href="/offres-emploi/ville/' . h($city['slug']) . '/">' . h($city['name']) . '</a>' : '') . '</p>'
         . '<h1>' . h($j['title']) . '</h1>'
-        . ($closed ? '<p class="lead">Cette offre n\'est plus disponible. Voici des offres similaires encore ouvertes.</p>' . $simHtml . $cityHtml . job_ad($site) : '')
+        . ($closed ? '<p class="lead">Cette offre n\'est plus disponible' . ($recent ? ' (pourvue ou retirée par le recruteur le ' . h(date_fr((string)$j['seen_at'])) . ')' : '') . '. Voici des offres similaires encore ouvertes.</p>' . $simHtml . $cityHtml . job_ad($site) : '')
         . job_summary($j, $facts, $closed ? '' : $rel)
         . ($desc !== '' ? '<section class="jdesc"><h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div></section>' : '')
         . '<p class="disc">Source : ' . h($j['src']) . ($j['src'] === 'Adzuna' ? ' — Jobs by Adzuna' : '') . '. Publiée le ' . h(date_fr($j['created_at'])) . '.</p>'
@@ -587,6 +597,10 @@ function page_job(array $site, string $slug): ?string
                 if ($cm['deadline']) $posting['validThrough'] = $cm['deadline'] . 'T23:59:00+02:00';
             }
         } elseif ($j['city'] === '') unset($posting['jobLocation']['address']['addressLocality']);
+        if (empty($posting['validThrough'])) { // fin estimée = publication + 60 j, toujours dans le futur tant que l'offre est ouverte
+            $vt = max(strtotime(substr($j['created_at'], 0, 10) . ' +60 days'), strtotime('today +30 days'));
+            $posting['validThrough'] = date('Y-m-d', $vt) . 'T23:59:00' . date('P', $vt);
+        }
         if ($sal = job_salary((string)$j['salary'])) {
             $posting['baseSalary'] = ['@type' => 'MonetaryAmount', 'currency' => 'EUR', 'value' => ['@type' => 'QuantitativeValue', 'unitText' => $sal['unit']]
                 + ($sal['min'] == $sal['max'] ? ['value' => $sal['min']] : ['minValue' => $sal['min'], 'maxValue' => $sal['max']])];
@@ -594,8 +608,9 @@ function page_job(array $site, string $slug): ?string
         $schema[] = $posting;
     }
     return layout($site, [
-        'title' => mb_substr($j['title'], 0, 50) . ' — ' . $j['city'] . ' | ' . $site['name'], 'desc' => mb_strimwidth(trim(($j['company'] ? $j['company'] . ' recrute : ' : 'Offre : ') . $j['title'] . ' à ' . $j['city'] . '. ' . preg_replace('/\s+/', ' ', $desc)), 0, 155, '…'),
-        'canonical' => 'https://' . $site['host'] . job_url($j), 'robots' => ($closed || job_is_thin($j)) ? 'noindex,follow' : null, 'schema' => $schema,
+        'title' => ($recent ? 'Offre expirée : ' : '') . $seoTitle . ' | ' . $site['name'],
+        'desc' => mb_strimwidth(trim(($j['company'] ? company_short((string)$j['company']) . ' recrute : ' : 'Offre : ') . $j['title'] . ($ctr ? ' en ' . $ctr : '') . ' à ' . $j['city'] . ($salM ? ', ' . $salM : '') . '. ' . ($recent ? 'Cette offre n\'est plus disponible, voici des offres proches. ' : '') . preg_replace('/\s+/', ' ', $desc)), 0, 155, '…'),
+        'canonical' => 'https://' . $site['host'] . job_url($j), 'robots' => (($closed && !$recent) || job_is_thin($j)) ? 'noindex,follow' : null, 'schema' => $schema,
     ], $body);
 }
 
@@ -636,7 +651,7 @@ function job_summary(array $j, array $facts, string $rel): string
     $ck = (string)$j['contract'];
     $tags = '<span class="tag t-' . h($ck ?: 'autre') . '">' . h(JOB_CONTRACTS[$ck] ?? 'Offre') . '</span>' . (str_starts_with((string)$j['id'], 'csp-') ? '<span class="tag t-pub">Emploi public</span>' : '');
     $dl = '';
-    foreach ($facts as $k => $v) if ($v !== '' && $v !== null) $dl .= '<div><dt>' . h($k) . '</dt><dd>' . h((string)$v) . '</dd></div>';
+    foreach ($facts as $k => $v) if ($v !== '' && $v !== null) $dl .= '<div><dt>' . h($k) . '</dt><dd>' . ($k === 'Entreprise' && str_starts_with((string)$v, '<a ') ? $v : h((string)$v)) . '</dd></div>'; // lien vers la page entreprise
     return '<div class="jsum"><div class="jsum-h"><span class="jc-logo" style="background:hsl(' . (int)$hue . ',55%,42%)" aria-hidden="true">' . h($ini) . '</span><div>'
         . ($co !== '' ? '<b>' . h($co) . '</b>' : '<b>Entreprise non communiquée</b>') . '<span>' . ICO_CLOCK . 'Publiée ' . h(job_ago((string)$j['created_at'])) . '</span></div></div>'
         . '<div class="jc-tags">' . $tags . '</div><dl class="jsum-g">' . $dl . '</dl>'
