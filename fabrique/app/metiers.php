@@ -316,7 +316,7 @@ function metier_links_for_job(array $site, array $j): string
 const JOB_INTENTS = [
     'emploi-sans-diplome' => ['Emploi sans diplôme', "(description LIKE '%sans diplôme%' OR description LIKE '%aucun diplôme%' OR description LIKE '%pas de diplôme%' OR description LIKE '%sans qualification%' OR experience LIKE '%sans diplôme%')",
         'Offres accessibles sans diplôme ni qualification particulière : l\'employeur forme au poste ou recherche avant tout la motivation.'],
-    'emploi-debutant' => ['Emploi débutant accepté', "(experience LIKE '%débutant%' OR description LIKE '%débutant accepté%' OR description LIKE '%débutants acceptés%' OR description LIKE '%débutant(e) accepté%' OR description LIKE '%aucune expérience requise%' OR description LIKE '%aucune expérience n\'est requise%')",
+    'emploi-debutant' => ['Emploi débutant accepté', "(experience LIKE '%débutant%' OR description LIKE '%débutant accepté%' OR description LIKE '%débutants acceptés%' OR description LIKE '%débutant(e) accepté%' OR description LIKE '%aucune expérience requise%' OR description LIKE '%aucune expérience n''est requise%')",
         'Postes ouverts aux débutants, sans expérience exigée : idéal pour un premier emploi ou une reconversion.'],
     'job-etudiant' => ['Job étudiant', "(title LIKE '%étudiant%' OR title LIKE '%ETUDIANT%' OR description LIKE '%job étudiant%' OR description LIKE '%emploi étudiant%' OR description LIKE '%compatible avec vos études%' OR description LIKE '%compatible avec des études%')",
         'Jobs compatibles avec les études : temps partiel, soirs, week-ends ou vacances scolaires.'],
