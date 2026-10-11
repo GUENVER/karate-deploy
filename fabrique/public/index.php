@@ -30,7 +30,7 @@ require dirname(__DIR__) . '/app/enrich.php';
 require dirname(__DIR__) . '/app/rome.php';
 require dirname(__DIR__) . '/app/decode.php';
 require dirname(__DIR__) . '/app/filters.php';
-foreach (['complements', 'depmap', 'pubdata', 'frontalier', 'proches', 'saison', 'etranger'] as $__m) if (is_file(dirname(__DIR__) . "/app/$__m.php")) require dirname(__DIR__) . "/app/$__m.php";
+foreach (['complements', 'depmap', 'pubdata', 'frontalier', 'proches', 'saison', 'etranger', 'salreg', 'outremer'] as $__m) if (is_file(dirname(__DIR__) . "/app/$__m.php")) require dirname(__DIR__) . "/app/$__m.php";
 
 $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
@@ -223,6 +223,7 @@ function route(array $site, string $path): ?string
         if ($path === '/barometre-emploi/') return page_barometre($site);
         if ($path === '/salaire/') return page_salaires_index($site);
         // métier / salaire momentanément sans offre (recalcul toutes les 3 h) : redirection temporaire plutôt qu'une 404
+        if (preg_match('#^/salaire/([a-z0-9\-]+)/([a-z\-]+)/$#', $path, $m) && function_exists('page_salaire_region')) { $h = page_salaire_region($site, $m[1], $m[2]); if ($h !== '') return $h; header('Location: /salaire/' . $m[1] . '/', true, 302); return null; }
         if (preg_match('#^/salaire/([a-z0-9\-]+)/$#', $path, $m)) { $h = page_salaire($site, $m[1]); if ($h !== '') return $h; header('Location: /emploi/' . $m[1] . '/', true, 302); return null; }
         if (preg_match('#^/emploi/([a-z0-9\-]+)/(?:([a-z0-9\-]+)/)?$#', $path, $m)) { $h = page_metier($site, $m[1], $m[2] ?? ''); if ($h !== '') return $h;
             if (!empty($m[2])) { header('Location: /emploi/' . $m[1] . '/', true, 302); return null; }
@@ -236,6 +237,7 @@ function route(array $site, string $path): ?string
         if (preg_match('#^/emploi-public/versant/(etat|territoriale|hospitaliere)/(?:page/(\d+)/)?$#', $path, $m)) return page_emploi_public_list($site, null, $m[1], max(1, (int)($m[2] ?? 1)));
         if (preg_match('#^/emploi-public/([a-z\-]+)/(?:page/(\d+)/)?$#', $path, $m) && ($reg = region_by_slug($m[1]))) return page_emploi_public_list($site, $reg, '', max(1, (int)($m[2] ?? 1)));
         if ($path === '/emploi-pres-de-chez-moi/' && function_exists('page_proches')) return page_proches($site);
+        if ($path === '/emploi-outre-mer/' && function_exists('page_outremer')) return page_outremer($site);
         if (str_starts_with($path, '/emploi-etranger/') && function_exists('ew_route') && ($h = ew_route($site, $path)) !== '') return $h;
         if (str_starts_with($path, '/emploi-saisonnier/') && function_exists('ss_route') && ($h = ss_route($site, $path)) !== '') return $h;
         if (str_starts_with($path, '/emploi-frontalier/') && function_exists('fx_route') && ($h = fx_route($site, $path)) !== '') return $h;

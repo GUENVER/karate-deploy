@@ -288,7 +288,7 @@ function page_salaire(array $site, string $mslug): string
     $byR = []; $byC = [];
     foreach ($all as $j) { $byR[$j['region']][] = $j; $byC[JOB_CONTRACTS[$j['contract']] ?? 'Autre'][] = $j; }
     $rowsR = '';
-    foreach (JOB_REGIONS as $code => [$slug, $rn]) if (!empty($byR[$code]) && ($s = metier_salary_stats($byR[$code]))) $rowsR .= '<tr><td><a href="/offres-emploi/' . $slug . '/">' . h($rn) . '</a></td><td>' . metier_fmt_eur($s['med']) . '</td><td>' . metier_fmt_eur($s['p25']) . ' – ' . metier_fmt_eur($s['p75']) . '</td><td>' . (int)$s['n'] . '</td></tr>';
+    foreach (JOB_REGIONS as $code => [$slug, $rn]) if (!empty($byR[$code]) && ($s = metier_salary_stats($byR[$code]))) $rowsR .= '<tr><td><a href="' . (function_exists('page_salaire_region') && $s['n'] >= SALREG_MIN ? '/salaire/' . h($mslug) . '/' . $slug . '/' : '/offres-emploi/' . $slug . '/') . '">' . h($rn) . '</a></td><td>' . metier_fmt_eur($s['med']) . '</td><td>' . metier_fmt_eur($s['p25']) . ' – ' . metier_fmt_eur($s['p75']) . '</td><td>' . (int)$s['n'] . '</td></tr>';
     $rowsC = '';
     foreach ($byC as $c => $js) if ($s = metier_salary_stats($js)) $rowsC .= '<tr><td>' . h($c) . '</td><td>' . metier_fmt_eur($s['med']) . '</td><td>' . (int)$s['n'] . '</td></tr>';
     $year = metier_fmt_eur($sal['med'] * 12);

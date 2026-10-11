@@ -186,7 +186,7 @@ function page_company(array $site, string $slug, string $citySlug = ''): string
     ];
     if ($topC) $faq[] = ["Quels types de contrat propose $name ?", implode(', ', array_map(fn($k, $v) => (JOB_CONTRACTS[$k] ?? ucfirst($k)) . ' (' . $v . ')', array_keys($contracts), $contracts)) . '.'];
 
-    $body = $crumbs . '<h1>' . h($name) . ' recrute' . h($where) . ' : ' . $nf($n) . ' offre' . ($n > 1 ? 's' : '') . ' d\'emploi</h1>' . $intro . $kpi
+    $body = $crumbs . '<h1>Recrutement ' . h($name) . h($where) . ' : ' . $nf($n) . ' offre' . ($n > 1 ? 's' : '') . ' d\'emploi</h1>' . $intro . $kpi
         . (function_exists('pd_company_html') && !$city ? pd_company_html($db, $c) : '')
         . '<h2 id="offres">Offres d\'emploi ' . h($name) . h($where) . ($fc ? ' en ' . h(JOB_CONTRACTS[$fc]) . ' (' . count(job_filter_contract($jobs, $fc)) . ')' : '') . '</h2>' . job_grid($site, job_filter_contract($jobs, $fc))
         . ($cityRows ? '<h2>Où ' . h($name) . ' recrute</h2>' . count_chips($cityRows) : '')
@@ -201,7 +201,7 @@ function page_company(array $site, string $slug, string $citySlug = ''): string
         ['@context' => 'https://schema.org', '@type' => 'ItemList', 'name' => "Offres d'emploi $name$where", 'numberOfItems' => min(count($jobs), 30),
             'itemListElement' => array_map(fn($i, $j) => ['@type' => 'ListItem', 'position' => $i + 1, 'url' => 'https://' . $site['host'] . job_url($j), 'name' => $j['title']], array_keys(array_slice($jobs, 0, 30)), array_slice($jobs, 0, 30))]];
     return layout($site, [
-        'title' => $name . ' recrutement' . $where . ' : ' . $nf($n) . ' offre' . ($n > 1 ? 's' : '') . ' d\'emploi' . ($topC ? ' ' . (JOB_CONTRACTS[$topC] ?? '') : '') . ' | ' . $site['name'],
+        'title' => 'Recrutement ' . $name . ($where !== '' ? $where : (count($regNames) === 1 ? ' (' . $regNames[0] . ')' : '')) . ' : ' . $nf($n) . ' offre' . ($n > 1 ? 's' : '') . ' d\'emploi' . ($topC ? ' ' . (JOB_CONTRACTS[$topC] ?? '') : '') . ' | ' . $site['name'],
         'desc' => mb_strimwidth("$name recrute$where : " . $nf($n) . " offre" . ($n > 1 ? 's' : '') . " d'emploi en cours" . ($topC ? ', surtout en ' . (JOB_CONTRACTS[$topC] ?? $topC) : '') . ($firstCity && !$city ? ", notamment à $firstCity" : '') . ($med ? ', salaire médian ' . $nf(round($med / 10) * 10) . ' €/mois' : '') . '. Postulez directement auprès de l\'employeur.', 0, 158, '…'),
         'canonical' => 'https://' . $site['host'] . $base, 'schema' => $schema, 'robots' => $fc ? 'noindex,follow' : null,
     ], $body);
@@ -211,6 +211,10 @@ function page_company(array $site, string $slug, string $citySlug = ''): string
 function company_unknown(array $site, PDO $db, string $slug): string
 {
     $words = array_values(array_filter(explode('-', $slug), fn($w) => strlen($w) > 2 && !in_array($w, ['sas', 'sarl', 'groupe', 'group', 'the', 'and', 'les', 'des'], true)));
+    // ancienne page d'un employeur qui recrute encore sous un intitulé voisin : redirection 301 vers sa page actuelle
+    $pre = implode('-', array_slice(explode('-', $slug), 0, 2)); // les deux premiers mots exacts du nom, au moins 8 caractères
+    if (strlen($pre) >= 8 && substr_count($slug, '-') >= 2) { try { $cs = $db->prepare("SELECT slug FROM job_companies WHERE n > 0 AND (slug = ? OR slug LIKE ?) ORDER BY n DESC LIMIT 1"); $cs->execute([$pre, $pre . '-%']);
+        if (($to = (string)$cs->fetchColumn()) !== '' && $to !== $slug) { header('Location: /recruteur/' . $to . '/', true, 301); return 'REDIRECT'; } } catch (Throwable $e) {} }
     $rows = [];
     foreach (array_slice($words, 0, 2) as $w) {
         $st = $db->prepare("SELECT * FROM jobs WHERE status='open' AND (company LIKE ? OR slug LIKE ?) ORDER BY created_at DESC LIMIT 12"); $st->execute(['%' . $w . '%', '%' . $w . '%']);
