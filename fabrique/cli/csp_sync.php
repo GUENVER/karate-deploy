@@ -22,8 +22,9 @@ $enqueue = $main->prepare("INSERT OR IGNORE INTO csp_queue(ref,url,found) VALUES
 // 0. Validité en tout début de passage (si le passage est interrompu, les offres restent à jour)
 foreach ($sites as $s0) {
     $d0 = jobs_db($s0['host']); csp_tables($d0);
-    $d0->exec("UPDATE jobs SET seen_at='" . now() . "' WHERE id IN (SELECT id FROM csp_meta WHERE (deadline<>'' AND deadline>=date('now')) OR (deadline='' AND fetched>=datetime('now','-45 days')))");
+    $d0->exec("UPDATE jobs SET seen_at='" . now() . "' WHERE seen_at < datetime('now','-12 hours') AND id IN (SELECT id FROM csp_meta WHERE (deadline<>'' AND deadline>=date('now')) OR (deadline='' AND fetched>=datetime('now','-45 days')))");
     $d0->exec("UPDATE jobs SET status='closed' WHERE status='open' AND id IN (SELECT id FROM csp_meta WHERE deadline<>'' AND deadline<date('now'))");
+    try { $d0->query('PRAGMA wal_checkpoint(PASSIVE)')->fetchAll(); } catch (Throwable $e) {} // WAL court : pas de récupération longue bloquant les visiteurs
 }
 
 // 1. Nouvelles offres : pages récentes jusqu'à une page entièrement connue
@@ -99,8 +100,9 @@ $say("$done offres importées, $bad en échec");
 
 // 4. Validité : offres dont la date limite est passée → fermées ; les autres restent ouvertes (jobs_sync ferme ce qui n'est pas revu)
 foreach ($ups as $h => [$db]) {
-    $db->exec("UPDATE jobs SET seen_at='" . now() . "', status='open' WHERE id IN (SELECT id FROM csp_meta WHERE (deadline<>'' AND deadline>=date('now')) OR (deadline='' AND fetched>=datetime('now','-45 days')))");
+    $db->exec("UPDATE jobs SET seen_at='" . now() . "', status='open' WHERE (status<>'open' OR seen_at < datetime('now','-12 hours')) AND id IN (SELECT id FROM csp_meta WHERE (deadline<>'' AND deadline>=date('now')) OR (deadline='' AND fetched>=datetime('now','-45 days')))");
     $db->exec("UPDATE jobs SET status='closed' WHERE status='open' AND id IN (SELECT id FROM csp_meta WHERE deadline<>'' AND deadline<date('now'))");
+    try { $db->query('PRAGMA wal_checkpoint(PASSIVE)')->fetchAll(); } catch (Throwable $e) {}
     $open = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn();
     if ($done) {
         if ((int)setting('csp_last_clear', '0') < time() - 10800) { cache_clear($h); setting_set('csp_last_clear', (string)time()); } // au plus toutes les 3 h (charge serveur)

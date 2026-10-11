@@ -141,7 +141,7 @@ function page_emploi_public(array $site): string
     $db = jobs_db($site['host']); csp_tables($db);
     $total = (int)$db->query('SELECT COUNT(*) FROM jobs j WHERE ' . csp_where())->fetchColumn();
     if (!$total) return '';
-    $byV = []; foreach ($db->query('SELECT m.versant, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE ' . csp_where() . ' GROUP BY m.versant') as $r) $byV[$r['versant']] = (int)$r['n'];
+    $byV = []; foreach ($db->query('SELECT m.versant, COUNT(*) n FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE ' . csp_where() . ' GROUP BY m.versant') as $r) $byV[$r['versant']] = (int)$r['n'];
     $byR = []; foreach ($db->query('SELECT j.region, COUNT(*) n FROM jobs j WHERE ' . csp_where() . ' GROUP BY j.region') as $r) $byR[$r['region']] = (int)$r['n'];
     $nf = fn($n) => number_format($n, 0, ',', ' ');
     $kpi = '<div class="kpi"><div><b>' . $nf($total) . '</b>offres ouvertes</div>';
@@ -150,15 +150,16 @@ function page_emploi_public(array $site): string
     $regs = '';
     foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($byR[$code])) $regs .= '<div class="card"><div class="in"><h3><a href="/emploi-public/' . $slug . '/">Emploi public ' . h($name) . '</a></h3><p>' . $nf($byR[$code]) . ' offres</p></div></div>';
     $latest = $db->query('SELECT j.* FROM jobs j WHERE ' . csp_where() . ' ORDER BY j.created_at DESC LIMIT 18')->fetchAll();
-    $cats = []; foreach ($db->query("SELECT substr(m.categorie,1,11) c, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . " AND m.categorie LIKE 'Catégorie%' GROUP BY c ORDER BY c") as $r) $cats[] = h(trim($r['c'])) . ' : ' . $nf((int)$r['n']);
+    $cats = []; foreach ($db->query("SELECT substr(m.categorie,1,11) c, COUNT(*) n FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . " AND m.categorie LIKE 'Catégorie%' GROUP BY c ORDER BY c") as $r) $cats[] = h(trim($r['c'])) . ' : ' . $nf((int)$r['n']);
     $body = '<h1 style="margin-top:28px">Emploi public : offres de la fonction publique</h1>'
         . '<p>' . $nf($total) . ' offres d\'emploi dans les trois fonctions publiques (État, territoriale, hospitalière), ouvertes aux fonctionnaires et, pour beaucoup, aux contractuels sans concours. Mises à jour chaque jour.</p>'
         . $kpi
-        . (function_exists('fr_map') ? '<style>' . fr_map_css() . '</style>' . fr_map($byR, '/emploi-public/') : '')
-        . '<h2>Offres par catégorie</h2>' . count_chips(array_map(fn($r) => [$r['c'], $r['n'], ''], $db->query("SELECT CASE WHEN m.categorie LIKE 'Catégorie A+%' THEN 'Catégorie A+' WHEN m.categorie LIKE 'Catégorie A%' THEN 'Catégorie A' WHEN m.categorie LIKE 'Catégorie B%' THEN 'Catégorie B' WHEN m.categorie LIKE 'Catégorie C%' THEN 'Catégorie C' ELSE 'Non précisée' END c, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . " GROUP BY c ORDER BY c")->fetchAll()))
-        . '<h2>Offres par domaine</h2>' . count_chips(array_map(fn($r) => [$r['domaine'], $r['n'], ''], $db->query("SELECT m.domaine, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . " AND m.domaine<>'' GROUP BY m.domaine ORDER BY n DESC LIMIT 24")->fetchAll()))
+        . (function_exists('fr_dep_map') && ($cspDep = csp_dep_counts($db, '')) ? '<style>' . fr_map_css() . '</style>' . fr_dep_map($cspDep['n'], fn(string $c) => isset($cspDep['slug'][$c]) ? '/emploi-public/departement/' . $cspDep['slug'][$c] . '/' : '', 'offres', [], 'Cliquez sur un département') : (function_exists('fr_map') ? '<style>' . fr_map_css() . '</style>' . fr_map($byR, '/emploi-public/') : ''))
+        . (function_exists('comp_closing_html') ? comp_closing_html($db) . '<p><a href="/emploi-public/versant/territoriale/?tri=limite" rel="nofollow">Toutes les offres triées par date limite →</a></p>' : '')
+        . '<h2>Offres par catégorie</h2>' . count_chips(array_map(fn($r) => [$r['c'], $r['n'], $r['c'] === 'Non précisée' ? '' : '/chercher/?categorie=' . rawurlencode(trim(str_replace('Catégorie', '', $r['c'])))], $db->query("SELECT CASE WHEN m.categorie LIKE 'Catégorie A+%' THEN 'Catégorie A+' WHEN m.categorie LIKE 'Catégorie A%' THEN 'Catégorie A' WHEN m.categorie LIKE 'Catégorie B%' THEN 'Catégorie B' WHEN m.categorie LIKE 'Catégorie C%' THEN 'Catégorie C' ELSE 'Non précisée' END c, COUNT(*) n FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . " GROUP BY c ORDER BY c")->fetchAll()))
+        . '<h2>Offres par domaine</h2>' . count_chips(array_map(fn($r) => [$r['domaine'], $r['n'], '/chercher/?domaine=' . rawurlencode((string)$r['domaine'])], $db->query("SELECT m.domaine, COUNT(*) n FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . " AND m.domaine<>'' GROUP BY m.domaine ORDER BY n DESC LIMIT 24")->fetchAll()))
         . '<h2>Par type d\'employeur</h2>' . count_chips(array_map(fn($l) => [$l[0], $l[2], $l[1]], csp_type_links($db)))
-        . '<h2>Emploi public par département</h2>' . count_chips(array_map(fn($r) => [$r['dep_name'] . ' (' . $r['dep'] . ')', $r['n'], '/emploi-public/departement/' . csp_dep_slug($r['dep_name']) . '/'], $db->query("SELECT m.dep, m.dep_name, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . " AND m.dep_name<>'' GROUP BY m.dep HAVING n>=5 ORDER BY m.dep")->fetchAll()))
+        . '<h2>Emploi public par département</h2>' . count_chips(array_map(fn($r) => [$r['dep_name'] . ' (' . $r['dep'] . ')', $r['n'], '/emploi-public/departement/' . csp_dep_slug($r['dep_name']) . '/'], $db->query("SELECT m.dep, m.dep_name, COUNT(*) n FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . " AND m.dep_name<>'' GROUP BY m.dep HAVING n>=5 ORDER BY m.dep")->fetchAll()))
         . '<h2>Emploi public par région</h2><div class="grid">' . $regs . '</div>'
         . '<h2>Dernières offres publiées</h2><div class="grid">' . implode('', array_map('job_card', $latest)) . '</div>'
         . '<h2>Travailler dans la fonction publique sans concours</h2><p>De nombreux postes sont ouverts aux <strong>contractuels</strong> : la mention « Emploi ouvert aux titulaires et aux contractuels » figure sur l\'offre. Les catégories indiquent le niveau : <strong>A</strong> (conception, encadrement, bac+3 et plus), <strong>B</strong> (application, bac à bac+2), <strong>C</strong> (exécution, sans diplôme ou CAP/BEP).</p>'
@@ -174,24 +175,29 @@ function page_emploi_public_list(array $site, ?array $reg, string $versant, int 
     $where = csp_where(); $args = [];
     if ($reg) { $where .= ' AND j.region=?'; $args[] = $reg['code']; }
     if ($versant !== '') { $where .= ' AND m.versant=?'; $args[] = $versant; }
-    $st = $db->prepare("SELECT COUNT(*) FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE $where"); $st->execute($args);
+    $st = $db->prepare("SELECT COUNT(*) FROM jobs j LEFT JOIN csp_meta m ON m.id=j.id WHERE $where"); $st->execute($args);
     $total = (int)$st->fetchColumn();
     if (!$total) return '';
+    $whereBase = $where; $argsBase = $args;
+    $jfa = function_exists('jf_active') && jf_active(); [$fw, $fa, $ford] = $jfa ? jf_sql(jf_get(), 'j.') : ['', [], 'j.created_at DESC'];
+    if ($jfa) { $where .= $fw; $args = array_merge($args, $fa); $st = $db->prepare("SELECT COUNT(*) FROM jobs j LEFT JOIN csp_meta m ON m.id=j.id WHERE $where"); $st->execute($args); $total = (int)$st->fetchColumn(); }
     $per = 30;
-    $st = $db->prepare("SELECT j.* FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE $where ORDER BY j.created_at DESC LIMIT $per OFFSET " . (($page - 1) * $per)); $st->execute($args);
+    $st = $db->prepare("SELECT j.* FROM jobs j LEFT JOIN csp_meta m ON m.id=j.id WHERE $where ORDER BY $ford LIMIT $per OFFSET " . (($page - 1) * $per)); $st->execute($args);
     $jobs = $st->fetchAll();
-    if (!$jobs) return '';
+    if (!$jobs && !$jfa) return '';
     $label = $versant !== '' ? CSP_VERSANTS[$versant][0] : 'Emploi public';
     $title = $label . ($reg ? ' en ' . $reg['name'] : '');
     $base = $reg ? '/emploi-public/' . $reg['slug'] . '/' : '/emploi-public/versant/' . $versant . '/';
     $deps = '';
     if ($reg) {
-        $st = $db->prepare("SELECT m.dep_name, m.dep, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE $where GROUP BY m.dep ORDER BY n DESC"); $st->execute($args);
+        $st = $db->prepare("SELECT m.dep_name, m.dep, COUNT(*) n FROM jobs j LEFT JOIN csp_meta m ON m.id=j.id WHERE $whereBase GROUP BY m.dep ORDER BY n DESC"); $st->execute($argsBase);
         $deps = implode(', ', array_map(fn($r) => (int)$r['n'] >= 5 ? '<a href="/emploi-public/departement/' . csp_dep_slug((string)$r['dep_name']) . '/">' . h($r['dep_name']) . '</a> (' . (int)$r['n'] . ')' : h($r['dep_name']) . ' (' . (int)$r['n'] . ')', $st->fetchAll()));
     }
     $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/emploi-public/">Emploi public</a> › ' . h($reg['name'] ?? $label) . '</p>'
         . '<h1>' . h($title) . '</h1><p>' . number_format($total, 0, ',', ' ') . ' offres d\'emploi public ouvertes' . ($reg ? ' en ' . h($reg['name']) . ($deps ? '. Par département : ' . $deps : '') : '') . '.</p>'
-        . csp_nav($versant) . '<div class="grid">' . implode('', array_map('job_card', $jobs)) . '</div>' . pager($base, $page, (int)ceil($total / $per))
+        . csp_nav($versant)
+        . ($page === 1 && !$jfa && function_exists('fr_dep_map') && ($cspDep = csp_dep_counts($db, $whereBase, $argsBase)) ? '<style>' . fr_map_css() . '</style>' . fr_dep_map($cspDep['n'], fn(string $c) => $base . '?dep=' . $c, 'offres', $reg ? array_keys(jf_region_deps($reg['code'])) : [], 'Cliquez sur un département pour filtrer') : '')
+        . (function_exists('jf_form') ? jf_form($base, ['public' => true, 'nosect' => true, 'contrat' => false, 'deps' => $reg ? jf_region_deps($reg['code']) : (defined('DEPTS') ? DEPTS : [])]) : '') . ($jobs ? '<div class="grid">' . implode('', array_map('job_card', $jobs)) . '</div>' : jf_empty()) . pager($base, $page, (int)ceil($total / $per))
         . (function_exists('careerjet_slot') && $reg ? careerjet_slot($site, 'fonction publique', $reg['name']) : '') . csp_disclaimer();
     return layout($site, ['title' => $title . ($page > 1 ? " — page $page" : '') . ' : offres d\'emploi | ' . $site['name'],
         'desc' => "$total offres d'emploi public" . ($reg ? ' en ' . $reg['name'] : '') . ($versant ? ' — ' . $label : '') . " : postes de fonctionnaires et de contractuels, mis à jour chaque jour.",
@@ -229,33 +235,40 @@ function page_csp_type(array $site, string $type, string $depSlug, int $page): s
     $dep = $depSlug !== '' ? csp_dep_by_slug($db, $depSlug) : null;
     if ($depSlug !== '' && !$dep) return '';
     $where = csp_where() . ($t ? ' AND ' . $t[1] : '') . ($dep ? ' AND m.dep=' . $db->quote($dep['dep']) : '');
-    $total = (int)$db->query("SELECT COUNT(*) FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE $where")->fetchColumn();
+    $total = (int)$db->query("SELECT COUNT(*) FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE $where")->fetchColumn();
     if ($total < 5) return '';
     $per = 30;
-    $jobs = $db->query("SELECT j.* FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE $where ORDER BY j.created_at DESC LIMIT $per OFFSET " . (($page - 1) * $per))->fetchAll();
-    if (!$jobs) return '';
+    $jfa = function_exists('jf_active') && jf_active(); [$fw, $fa, $ford] = $jfa ? jf_sql(jf_get(), 'j.') : ['', [], 'j.created_at DESC'];
+    if ($jfa) { $st = $db->prepare("SELECT COUNT(*) FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE $where$fw"); $st->execute($fa); $total = (int)$st->fetchColumn(); }
+    $st = $db->prepare("SELECT j.* FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE $where$fw ORDER BY $ford LIMIT $per OFFSET " . (($page - 1) * $per)); $st->execute($fa);
+    $jobs = $st->fetchAll();
+    if (!$jobs && !$jfa) return '';
     $nf = fn($n) => number_format($n, 0, ',', ' ');
     $label = $t ? $t[0] : 'Emploi public';
     $title = $label . ($dep ? ' — ' . $dep['dep_name'] . ' (' . $dep['dep'] . ')' : '');
     $base = $t ? '/emploi-public/type/' . $type . '/' . ($dep ? $depSlug . '/' : '') : '/emploi-public/departement/' . $depSlug . '/';
     $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/emploi-public/">Emploi public</a> › ' . ($t && $dep ? '<a href="/emploi-public/type/' . $type . '/">' . h($label) . '</a> › ' . h($dep['dep_name']) : h($t ? $label : $dep['dep_name'])) . '</p>'
         . '<h1>' . h($title) . ' : ' . $nf($total) . ' offres</h1><p class="lead">' . h($t ? $t[2] : 'Toutes les offres de la fonction publique d\'État, territoriale et hospitalière dans ce département.') . ' ' . $nf($total) . ' offres ouvertes, mises à jour le ' . h(date_fr(now())) . '.</p>';
+    if ($page === 1 && $dep && !$t && function_exists('comp_closing_html')) $body .= comp_closing_html($db, (string)$dep['dep'], 6);
+    if ($page === 1 && $t && !$dep && !$jfa && function_exists('fr_dep_map') && ($cspDep = csp_dep_counts($db, $t[1]))) {
+        $body .= '<style>' . fr_map_css() . '</style>' . fr_dep_map($cspDep['n'], fn(string $c) => isset($cspDep['slug'][$c]) && $cspDep['n'][$c] >= 5 ? '/emploi-public/type/' . $type . '/' . $cspDep['slug'][$c] . '/' : $base . '?dep=' . $c, 'offres', [], 'Cliquez sur un département');
+    }
     if ($page === 1) {
         // déclinaisons : départements (page type) ou types d'employeur (page département)
         $chips = [];
         if ($t && !$dep) {
-            foreach ($db->query("SELECT m.dep, m.dep_name, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . ' AND ' . $t[1] . " AND m.dep_name<>'' GROUP BY m.dep ORDER BY n DESC") as $r)
+            foreach ($db->query("SELECT m.dep, m.dep_name, COUNT(*) n FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . ' AND ' . $t[1] . " AND m.dep_name<>'' GROUP BY m.dep ORDER BY n DESC") as $r)
                 if ($r['n'] >= 5) $chips[] = [$r['dep_name'] . ' (' . $r['dep'] . ')', $r['n'], '/emploi-public/type/' . $type . '/' . csp_dep_slug($r['dep_name']) . '/'];
             if ($chips) $body .= '<h2>' . h($label) . ' par département</h2>' . count_chips($chips);
         } elseif ($dep) {
             foreach (CSP_TYPES as $k => $tt) {
-                $n = (int)$db->query("SELECT COUNT(*) FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . ' AND ' . $tt[1] . ' AND m.dep=' . $db->quote($dep['dep']))->fetchColumn();
+                $n = (int)$db->query("SELECT COUNT(*) FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . ' AND ' . $tt[1] . ' AND m.dep=' . $db->quote($dep['dep']))->fetchColumn();
                 if ($n >= 5 && $k !== $type) $chips[] = [$tt[0], $n, '/emploi-public/type/' . $k . '/' . $depSlug . '/'];
             }
             if ($chips) $body .= '<h2>Par type d\'employeur en ' . h($dep['dep_name']) . '</h2>' . count_chips($chips);
         }
     }
-    $body .= '<div class="grid">' . implode('', array_map('job_card', $jobs)) . '</div>' . pager($base, $page, (int)ceil($total / $per)) . csp_disclaimer();
+    $body .= (function_exists('jf_form') ? jf_form($base, ['public' => true, 'nosect' => true, 'contrat' => false, 'deps' => $dep ? [] : (defined('DEPTS') ? DEPTS : [])]) : '') . ($jobs ? '<div class="grid">' . implode('', array_map('job_card', $jobs)) . '</div>' : jf_empty()) . pager($base, $page, (int)ceil($total / $per)) . csp_disclaimer();
     return layout($site, ['title' => $title . ' : ' . $nf($total) . ' offres' . ($page > 1 ? " — page $page" : '') . ' | ' . $site['name'],
         'desc' => $nf($total) . ' offres : ' . mb_strtolower($title) . '. ' . ($t ? $t[2] : 'Fonction publique d\'État, territoriale et hospitalière.') . ' Postes ouverts aux contractuels.',
         'canonical' => 'https://' . $site['host'] . $base . ($page > 1 ? "page/$page/" : ''),
@@ -267,11 +280,22 @@ function csp_type_links(PDO $db, bool $withDeps = false): array
 {
     csp_tables($db); $o = [];
     foreach (CSP_TYPES as $k => $t) {
-        $n = (int)$db->query("SELECT COUNT(*) FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . ' AND ' . $t[1])->fetchColumn();
+        $n = (int)$db->query("SELECT COUNT(*) FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . ' AND ' . $t[1])->fetchColumn();
         if ($n < 5) continue;
         $o[] = [$t[0], '/emploi-public/type/' . $k . '/', $n];
-        if ($withDeps) foreach ($db->query("SELECT m.dep_name, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . ' AND ' . $t[1] . " AND m.dep_name<>'' GROUP BY m.dep HAVING n>=5") as $r) $o[] = ['', '/emploi-public/type/' . $k . '/' . csp_dep_slug($r['dep_name']) . '/', $r['n']];
+        if ($withDeps) foreach ($db->query("SELECT m.dep_name, COUNT(*) n FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . ' AND ' . $t[1] . " AND m.dep_name<>'' GROUP BY m.dep HAVING n>=5") as $r) $o[] = ['', '/emploi-public/type/' . $k . '/' . csp_dep_slug($r['dep_name']) . '/', $r['n']];
     }
-    if ($withDeps) foreach ($db->query("SELECT m.dep_name, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE " . csp_where() . " AND m.dep_name<>'' GROUP BY m.dep HAVING n>=5") as $r) $o[] = ['', '/emploi-public/departement/' . csp_dep_slug($r['dep_name']) . '/', $r['n']];
+    if ($withDeps) foreach ($db->query("SELECT m.dep_name, COUNT(*) n FROM csp_meta m CROSS JOIN jobs j ON j.id=m.id WHERE " . csp_where() . " AND m.dep_name<>'' GROUP BY m.dep HAVING n>=5") as $r) $o[] = ['', '/emploi-public/departement/' . csp_dep_slug($r['dep_name']) . '/', $r['n']];
     return $o;
+}
+
+// Offres publiques par département (code => nb, code => slug de page département) ; $extra : condition SQL sur m./j.
+function csp_dep_counts(PDO $db, string $extra, array $args = []): array
+{
+    $w = csp_where() . ($extra !== '' ? (str_starts_with(ltrim($extra), 'j.status') ? '' : ' AND ' . $extra) : '');
+    if ($extra !== '' && str_starts_with(ltrim($extra), 'j.status')) $w = $extra;
+    $st = $db->prepare("SELECT m.dep, m.dep_name, COUNT(*) n FROM jobs j JOIN csp_meta m ON m.id=j.id WHERE $w AND m.dep<>'' GROUP BY m.dep"); $st->execute($args);
+    $o = ['n' => [], 'slug' => []];
+    foreach ($st as $r) { $d = strtoupper((string)$r['dep']); $o['n'][$d] = (int)$r['n']; if ($r['dep_name'] !== '') $o['slug'][$d] = csp_dep_slug((string)$r['dep_name']); }
+    return $o['n'] ? $o : [];
 }

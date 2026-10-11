@@ -5,10 +5,10 @@
 declare(strict_types=1);
 
 // Emplacement à insérer dans une page : le contenu est demandé à /_cj après affichage (compatible avec le cache HTML).
-function careerjet_slot(array $site, string $keywords, string $location): string
+function careerjet_slot(array $site, string $keywords, string $location, string $locale = 'fr_FR'): string
 {
     if (setting('careerjet_key', '') === '' || empty($site['jobs'])) return '';
-    $q = http_build_query(['k' => mb_substr($keywords, 0, 80), 'l' => mb_substr($location, 0, 60)]);
+    $q = http_build_query(['k' => mb_substr($keywords, 0, 80), 'l' => mb_substr($location, 0, 60)] + ($locale !== 'fr_FR' ? ['c' => $locale] : []));
     return '<div class="cj" data-q="' . h($q) . '"></div>'
         . '<script>(function(){var d=document.currentScript.previousElementSibling;fetch("/_cj?"+d.dataset.q).then(function(r){return r.ok?r.text():""}).then(function(t){d.innerHTML=t}).catch(function(){})})()</script>';
 }
@@ -23,15 +23,16 @@ function careerjet_endpoint(array $site): void
     if ($key === '' || is_bot()) exit;
     $kw = trim(mb_substr((string)($_GET['k'] ?? ''), 0, 80));
     $loc = trim(mb_substr((string)($_GET['l'] ?? ''), 0, 60));
+    $loc_code = in_array((string)($_GET['c'] ?? ''), ['fr_CH', 'fr_BE', 'fr_LU'], true) ? (string)$_GET['c'] : 'fr_FR';
     $dir = cfg('data_dir') . '/cache/careerjet';
-    $file = $dir . '/' . md5($kw . '|' . $loc) . '.json';
+    $file = $dir . '/' . md5($kw . '|' . $loc . ($loc_code !== 'fr_FR' ? '|' . $loc_code : '')) . '.json';
     $jobs = null;
     if (is_file($file) && filemtime($file) > time() - 900) $jobs = json_decode((string)file_get_contents($file), true);
     if (!is_array($jobs)) {
         $ip = (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '');
         $ip = trim(explode(',', $ip)[0]);
         $ch = curl_init('https://search.api.careerjet.net/v4/query?' . http_build_query([
-            'locale_code' => 'fr_FR', 'keywords' => $kw, 'location' => $loc, 'sort' => 'date', 'page_size' => 12, 'fragment_size' => 160,
+            'locale_code' => $loc_code, 'keywords' => $kw, 'location' => $loc, 'sort' => 'date', 'page_size' => 12, 'fragment_size' => 160,
             'user_ip' => $ip, 'user_agent' => (string)($_SERVER['HTTP_USER_AGENT'] ?? 'Mozilla/5.0')]));
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8, CURLOPT_USERPWD => $key . ':', CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
             CURLOPT_REFERER => 'https://' . $site['host'] . '/']); // Careerjet exige un Referer déclaré
@@ -50,6 +51,6 @@ function careerjet_endpoint(array $site): void
     }
     if ($cards === '') exit;
     echo '<h2>Plus d\'offres' . ($loc !== '' ? ' — ' . h($loc) : '') . '</h2><div class="grid">' . $cards . '</div>'
-        . '<p class="disc">Offres complémentaires fournies par <a href="https://www.careerjet.fr/" rel="nofollow noopener" target="_blank">Careerjet</a>.</p>';
+        . '<p class="disc">Offres complémentaires fournies par <a href="' . ($loc_code === 'fr_FR' ? 'https://www.careerjet.fr/' : 'https://www.optioncarriere.' . strtolower(substr($loc_code, 3)) . '/') . '" rel="nofollow noopener" target="_blank">Careerjet</a>.</p>';
     exit;
 }

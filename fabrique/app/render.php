@@ -41,14 +41,14 @@ blockquote{border-left:4px solid var(--c);margin:1em 0;padding:.3em 1em;backgrou
 #evcalc .row{display:flex;flex-wrap:wrap;gap:10px}#evcalc label{flex:1 1 140px;font-size:.85rem}#evcalc input{width:100%;padding:7px;border:1px solid var(--b);border-radius:8px;font-size:1rem}aside h4{margin:0 0 10px}
 aside ul{padding-left:18px;margin:0;font-size:.93rem}aside li{margin:6px 0}.pag{display:flex;gap:10px;justify-content:center;margin:30px 0}.pag a,.pag span{padding:6px 12px;border:1px solid var(--b);border-radius:8px;text-decoration:none}
 .dd{position:relative}.dd summary{cursor:pointer;list-style:none;background:var(--c);color:#fff;padding:2px 12px;line-height:1.5;border-radius:20px;white-space:nowrap;display:inline-block}.dd summary:hover,.dd[open] summary{filter:brightness(1.12)}.dd summary strong{color:#fff}.dd summary::-webkit-details-marker{display:none}.dd summary:after{content:' ▾';color:#fff}
-.ddp{position:absolute;left:0;top:36px;z-index:50;background:#fff;border:1px solid var(--b);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:14px 18px;width:min(560px,92vw);display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;font-size:.9rem}
-.ddp b{grid-column:1/-1;margin:8px 0 2px;color:var(--c);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}.ddp a{color:var(--t)!important;padding:3px 0}.ddp a:hover{color:var(--c)!important}
-@media(max-width:700px){.ddp{position:static;box-shadow:none;width:100%;margin-top:8px}}
+.ddp{position:absolute;left:0;top:calc(100% + 8px);z-index:50;background:#fff;border:1px solid var(--b);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:14px 18px;width:min(560px,92vw);display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;font-size:.9rem}
+.ddp b{grid-column:1/-1;margin:8px 0 2px;color:var(--c);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}.ddp a{color:var(--t)!important;padding:3px 0}.ddp a:hover{color:var(--c)!important}.ddp:before{content:'';position:absolute;left:0;right:0;top:-12px;height:12px}.ddp.one{grid-template-columns:1fr;width:min(300px,92vw)}.dd.alt .ddp{left:auto;right:0}.dd.alt summary{background:#fff;color:var(--t);border:1px solid var(--b)}.dd.alt summary strong,.dd.alt summary:after{color:var(--t)}
+@media(max-width:700px){.ddp,.ddp.one{position:static;box-shadow:none;width:100%;margin-top:8px}.ddp:before{display:none}.dd[open]{flex:1 1 100%}}
 header.hl .hlw{justify-content:center;padding:10px 16px 8px}.hlogo img{height:70px;width:auto;display:block}
 .hnav{border-top:1px solid var(--b);background:var(--s)}.hnav .w{display:flex;align-items:center;gap:14px;padding:8px 16px}
 .hnav nav.cats{flex:1;flex-wrap:nowrap;overflow-x:auto;gap:4px;scrollbar-width:none;justify-content:flex-start}.hnav nav.cats::-webkit-scrollbar{display:none}
 .hnav nav.cats a{white-space:nowrap;padding:5px 11px;border-radius:8px;color:var(--t);font-weight:500}.hnav nav.cats a:hover,.hnav nav.cats a[aria-current]{background:#fff;color:var(--c);box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.hnav form.q{margin-left:0}.hnav form.q input{width:180px;background:#fff}
+.hnav form.q{margin-left:auto}@media(min-width:701px){.hnav .w{flex-wrap:wrap;row-gap:8px}.hnav nav.cats{flex:0 1 auto;flex-wrap:wrap;overflow:visible}}.hnav form.q input{width:180px;background:#fff}
 @media(max-width:700px){.hlogo img{height:50px}.hnav .w{flex-wrap:wrap;gap:8px}.hnav form.q{flex:1 1 100%;order:3}.hnav form.q input{width:100%}.hnav nav.cats{flex:1 1 100%;order:2;-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent);padding-right:30px}}
 pre{white-space:pre-wrap;word-break:break-word;overflow-x:auto;max-width:100%;background:var(--s);padding:12px;border-radius:8px;font-size:.85rem}main,article{min-width:0;overflow-wrap:break-word}main iframe,main video{max-width:100%}.layout>*{min-width:0}
 footer.bot{border-top:1px solid var(--b);margin-top:50px;padding:26px 0;color:var(--m);font-size:.88rem;background:var(--s)}footer.bot a{color:var(--m);margin-right:14px}";
@@ -58,8 +58,10 @@ function layout(array $site, array $m, string $body): string
 {
     $pub = setting('adsense_pub', 'ca-pub-8104956615440701');
     $head = '<title>' . h($m['title']) . '</title><meta name="description" content="' . h($m['desc'] ?? '') . '">';
+    if (!empty($GLOBALS['jf_noindex'])) $m['robots'] = 'noindex,follow';
     $head .= '<meta name="robots" content="' . ($m['robots'] ?? 'index,follow,max-image-preview:large,max-snippet:-1') . '">';
     if (!empty($m['canonical'])) $head .= '<link rel="canonical" href="' . h($m['canonical']) . '">';
+    if (!empty($m['head'])) $head .= $m['head'];
     $head .= '<meta property="og:site_name" content="' . h($site['name']) . '"><meta property="og:title" content="' . h($m['og_title'] ?? $m['title']) . '">';
     $head .= '<meta property="og:description" content="' . h($m['desc'] ?? '') . '"><meta property="og:type" content="' . ($m['og_type'] ?? 'website') . '">';
     if (!empty($m['canonical'])) $head .= '<meta property="og:url" content="' . h($m['canonical']) . '">';
@@ -68,31 +70,46 @@ function layout(array $site, array $m, string $body): string
     foreach ($m['schema'] ?? [] as $sc) $head .= '<script type="application/ld+json">' . json_encode($sc, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
     if ($site['adsense'] && $pub && empty($m['noads'])) $head .= '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' . h($pub) . '" crossorigin="anonymous"></script>'; // chargement immédiat (le chargement différé faisait perdre les visiteurs rapides)
     if ($ga = (setting('ga4_id:' . $site['host'], '') ?: setting('ga4_id', ''))) $head .= '<script async src="https://www.googletagmanager.com/gtag/js?id=' . h($ga) . '"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","' . h($ga) . '");</script>';
+    if ($hx = (string)setting('head_html:' . $site['host'], '')) $head .= $hx; // scripts tiers propres au site (ex. vérification Travelpayouts)
 
     $nav = ''; $navJobs = '';
     if (!empty($site['fuel'])) $nav .= '<a href="/prix-carburant/"><strong>Prix carburant</strong></a>';
+    if (!empty($site['bzh'])) $nav .= '<a href="/agenda/ce-week-end/"><strong>Ce week-end</strong></a><a href="/agenda/">Agenda</a><a href="/plages/">Plages</a><a href="/iles/">Îles</a><a href="/monuments-historiques/">Monuments</a><a href="/lieux-a-visiter/">À visiter</a><a href="/festivals/">Festivals</a>';
     if (function_exists('places_mod') && ($pm = places_mod($site))) $nav .= '<a href="/' . $pm['prefix'] . '/"><strong>' . h($pm['nav']) . '</strong></a>';
     if (!empty($site['commune'])) $nav .= '<a href="/commune/"><strong>Fiches communes</strong></a>';
     if (!empty($site['dpe'])) $nav .= '<a href="/dpe/"><strong>DPE de votre commune</strong></a>';
     if (!empty($site['ev'])) $nav .= '<a href="/bornes-recharge/"><strong>Bornes de recharge</strong></a>';
     if (!empty($site['jobs']) && function_exists('jobs_db') && jobs_db($site['host'])->query("SELECT 1 FROM jobs WHERE status='open' LIMIT 1")->fetchColumn()) $navJobs = jobs_menu($site);
     foreach (array_slice(site_categories($site), 0, 7) as $c) $nav .= '<a href="/category/' . h($c['slug']) . '/"' . (str_starts_with((string)($_SERVER['REQUEST_URI'] ?? ''), '/category/' . $c['slug'] . '/') ? ' aria-current="page"' : '') . '>' . h(nav_label($c['name'])) . '</a>';
+    if (function_exists('nor_menu') && nor_on($site)) $nav = nor_menu($site);
+    $ddCons = '';
+    if ($navJobs) {
+        $cons = ''; foreach (array_slice(site_categories($site), 0, 7) as $c) $cons .= '<a href="/category/' . h($c['slug']) . '/">' . h(nav_label($c['name'])) . '</a>';
+        $hasCsp = str_contains($navJobs, '/emploi-public/');
+        $nav = ($hasCsp ? '<a href="/emploi-public/">Emploi public</a>' : '') . '<a href="/salaire/">Salaires</a><a href="/recruteur/">Entreprises qui recrutent</a>';
+        if ($cons) $ddCons = '<details class="dd alt"><summary><strong>Conseils</strong></summary><nav class="ddp one" aria-label="Conseils emploi">' . $cons . '</nav></details>';
+    }
+    $ddJs = $navJobs ? '<script>document.addEventListener("click",function(e){document.querySelectorAll("details.dd[open]").forEach(function(d){if(!d.contains(e.target))d.removeAttribute("open")})});if(matchMedia("(hover:hover)").matches)document.querySelectorAll("details.dd").forEach(function(d){d.addEventListener("mouseenter",function(){d.open=true});d.addEventListener("mouseleave",function(){d.open=false})})</script>' : '';
+    $lgJ = setting('logo:' . $site['host'], '');
+    $jobsHdr = ($navJobs && $lgJ) ? jobs_header($site, $lgJ, $navJobs) : '';
     $parts = explode(' ', $site['name'], 2);
     $logo = h($parts[0]) . (isset($parts[1]) ? ' <span>' . h($parts[1]) . '</span>' : '');
+    if (function_exists('nor_on') && nor_on($site)) $logo = '<picture><source srcset="/assets/logo-passion-normandie.webp" type="image/webp"><img src="/assets/logo-passion-normandie.png" alt="' . h($site['name']) . '" width="177" height="64" style="display:block;height:64px;width:auto"></picture>';
     $year = gmdate('Y');
     $amzDisc = $site['amazon'] && setting('amazon_tag', '') ? '<p class="disc">En tant que Partenaire Amazon, ' . h($site['name']) . ' réalise un bénéfice sur les achats remplissant les conditions requises. Les liens marqués « Voir sur Amazon » sont des liens d\'affiliation.</p>' : '';
 
-    return '<!doctype html><html lang="' . h($site['lang'] ?: 'fr') . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        . $head . '<style>' . css($site) . (!empty($site['jobs']) ? jobs_css() : '') . '</style></head><body' . (!empty($site['jobs']) ? ' class="jobs"' : '') . '>'
-        . (($lg = setting('logo:' . $site['host'], ''))
+    return '<!doctype html><html lang="' . h($m['lang'] ?? ($site['lang'] ?: 'fr')) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        . $head . '<style>' . css($site) . (!empty($site['jobs']) ? jobs_css() . jobs_header_css() : '') . '</style></head><body' . (!empty($site['jobs']) ? ' class="jobs"' : '') . '>'
+        . ($jobsHdr ?: ((function_exists('bzh_header') && !empty($site['bzh'])) ? bzh_header($site) : ((function_exists('nor_header') && nor_on($site)) ? nor_header($site) : (($lg = setting('logo:' . $site['host'], ''))
             ? '<header class="top hl"><div class="w hlw"><a class="hlogo" href="/" aria-label="' . h($site['name']) . ' — accueil"><img src="' . h($lg) . '" alt="' . h($site['name']) . '" width="288" height="70" fetchpriority="high"></a></div>'
-              . '<div class="hnav"><div class="w">' . $navJobs . '<nav class="cats" aria-label="Rubriques">' . $nav . '</nav>'
-              . '<form class="q" action="' . (!empty($site['jobs']) ? '/chercher/' : '/recherche/') . '" method="get"><input type="search" name="q" placeholder="' . (!empty($site['jobs']) ? 'Métier, mot-clé…' : 'Rechercher…') . '" aria-label="Rechercher"></form></div></div></header>'
-            : '<header class="top"><div class="w"><a class="logo" href="/">' . $logo . '</a><nav class="cats">' . $navJobs . $nav . '</nav>'
-              . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></header>')
+              . '<div class="hnav"><div class="w">' . $navJobs . '<nav class="cats" aria-label="Rubriques">' . $nav . '</nav>' . $ddCons
+              . '<form class="q" action="' . (!empty($site['jobs']) ? '/chercher/' : '/recherche/') . '" method="get"><input type="search" name="q" placeholder="' . (!empty($site['jobs']) ? 'Métier, mot-clé…' : 'Rechercher…') . '" aria-label="Rechercher"></form></div></div></header>' . $ddJs
+            : '<header class="top"><div class="w"><a class="logo" href="/">' . $logo . '</a><nav class="cats">' . $navJobs . $nav . '</nav>' . $ddCons
+              . '<form class="q" action="/recherche/" method="get"><input type="search" name="q" placeholder="Rechercher…" aria-label="Rechercher"></form></div></header>' . $ddJs))))
         . '<main class="w">' . $body . '</main>'
         . '<footer class="bot"><div class="w"><p><strong>' . h($site['name']) . '</strong> — ' . h($site['tagline']) . '</p>'
         . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a>' . (!empty($site['jobs']) ? '<a href="/nos-sources/">Nos sources</a><a href="/barometre-emploi/">Baromètre de l\'emploi</a>' : '') . '<a href="/confidentialite/">Confidentialité</a><a href="/plan-du-site/">Plan du site</a></p>'
+        . (in_array($site['host'], ['www.decouverte.org', 'www.normandie.me', 'camping-car.decouverte.org', 'balades.normandie.me'], true) ? '<p>Voir aussi : <a href="https://bretagne.decouverte.org/">Que faire en Bretagne</a> · <a href="https://bretagne.decouverte.org/agenda/ce-week-end/">sorties ce week-end en Bretagne</a> · <a href="https://bretagne.decouverte.org/iles/">îles bretonnes et horaires des bateaux</a></p>' : '')
         . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer><script>setTimeout(function(){var d=new FormData();d.append("p",location.pathname);navigator.sendBeacon("/_pv",d)},1500)</script></body></html>';
 }
 
@@ -117,8 +134,7 @@ function jobs_menu_build(array $site): string
     foreach (JOB_REGIONS as $code => [$slug, $name]) if (!empty($counts[$code])) $o .= '<a href="/offres-emploi/' . $slug . '/">' . h($name) . '</a>';
     try { $cities = $db->query('SELECT slug, name FROM job_cities ORDER BY n DESC LIMIT 12')->fetchAll(); } catch (Throwable $e) { $cities = []; }
     if ($cities) { $o .= '<b>Grandes villes</b>'; foreach ($cities as $c) $o .= '<a href="/offres-emploi/ville/' . h($c['slug']) . '/">' . h($c['name']) . '</a>'; }
-    return '<details class="dd"><summary><strong>Offres d\'emploi</strong></summary><nav class="ddp" aria-label="Offres d\'emploi par région">' . $o . '</nav></details>'
-        . '<script>document.addEventListener("click",function(e){document.querySelectorAll("details.dd[open]").forEach(function(d){if(!d.contains(e.target))d.removeAttribute("open")})});if(matchMedia("(hover:hover)").matches)document.querySelectorAll("details.dd").forEach(function(d){d.addEventListener("mouseenter",function(){d.open=true});d.addEventListener("mouseleave",function(){d.open=false})})</script>';
+    return '<details class="dd"><summary><strong>Offres d\'emploi</strong></summary><nav class="ddp" aria-label="Offres d\'emploi par région">' . $o . '</nav></details>';
 }
 
 // Accès direct aux offres par région en tête de l'accueil d'un site d'emploi.
@@ -188,16 +204,19 @@ function list_posts(array $site, string $where, array $args, int $page, int $per
 function pager(string $base, int $page, int $pages): string
 {
     if ($pages < 2) return '';
+    $qs = function_exists('jf_pager_qs') ? jf_pager_qs() : ''; $nf = $qs !== '' ? ' nofollow' : '';
     $o = '<nav class="pag">';
-    if ($page > 1) $o .= '<a href="' . h($page == 2 ? $base : $base . 'page/' . ($page - 1) . '/') . '" rel="prev">← Précédent</a>';
+    if ($page > 1) $o .= '<a href="' . h(($page == 2 ? $base : $base . 'page/' . ($page - 1) . '/') . $qs) . '" rel="prev' . $nf . '">← Précédent</a>';
     $o .= '<span>Page ' . $page . ' / ' . $pages . '</span>';
-    if ($page < $pages) $o .= '<a href="' . h($base . 'page/' . ($page + 1) . '/') . '" rel="next">Suivant →</a>';
+    if ($page < $pages) $o .= '<a href="' . h($base . 'page/' . ($page + 1) . '/' . $qs) . '" rel="next' . $nf . '">Suivant →</a>';
     return $o . '</nav>';
 }
 
 function org_schema(array $site): array
 {
-    return ['@type' => 'Organization', 'name' => $site['name'], 'url' => 'https://' . $site['host'] . '/'];
+    $o = ['@type' => 'Organization', 'name' => $site['name'], 'url' => 'https://' . $site['host'] . '/'];
+    if (function_exists('nor_on') && nor_on($site)) $o['logo'] = 'https://' . $site['host'] . '/assets/logo-passion-normandie-carre.png';
+    return $o;
 }
 
 function page_home(array $site, int $page): string
@@ -221,7 +240,7 @@ function page_home(array $site, int $page): string
             'potentialAction' => ['@type' => 'SearchAction', 'target' => 'https://' . $site['host'] . (!empty($site['jobs']) ? '/chercher/?q={q}' : '/recherche/?q={q}'), 'query-input' => 'required name=q']],
             array_filter(['@context' => 'https://schema.org', '@type' => 'Organization', '@id' => 'https://' . $site['host'] . '/#organization', 'name' => $site['name'], 'url' => 'https://' . $site['host'] . '/',
                 'logo' => ($lg = setting('logo:' . $site['host'], '')) ? ['@type' => 'ImageObject', 'url' => 'https://' . $site['host'] . strtok($lg, '?'), 'width' => 577, 'height' => 140] : null,
-                'description' => $site['tagline'] ?: null, 'email' => setting('contact_email', '') ?: null, 'areaServed' => !empty($site['jobs']) ? 'FR' : null])],
+                'description' => $site['tagline'] ?: null, 'email' => setting('contact_email', '') ?: null, 'areaServed' => !empty($site['jobs']) ? 'FR' : null, 'sameAs' => (!empty($site['jobs']) && function_exists('tg_public_links')) ? (tg_public_links() ?: null) : null])],
     ], $body);
 }
 
@@ -234,11 +253,11 @@ function page_category(array $site, string $slug, int $page): string
     [$posts, $pages, $total] = list_posts($site, 'AND p.category=?', [$slug], $page);
     if (!$posts) return '';
     $base = "/category/$slug/";
-    $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › ' . h($cat['name']) . '</p><h1>' . h($cat['name']) . '</h1>'
+    $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › ' . h(nav_label($cat['name'])) . '</p><h1>' . h(nav_label($cat['name'])) . '</h1>'
         . ($cat['description'] && $page == 1 ? '<p>' . h($cat['description']) . '</p>' : '')
         . '<div class="grid">' . implode('', array_map('card', $posts)) . '</div>' . pager($base, $page, $pages);
     return layout($site, [
-        'title' => $cat['name'] . ($page > 1 ? " — page $page" : '') . ' | ' . $site['name'],
+        'title' => nav_label($cat['name']) . ($page > 1 ? " — page $page" : '') . ' | ' . $site['name'],
         'desc' => $cat['description'] ?: ("Tous nos articles « {$cat['name']} » : $total guides et conseils pratiques."),
         'canonical' => 'https://' . $site['host'] . $base . ($page > 1 ? "page/$page/" : ''),
         'schema' => [breadcrumbs($site, [[$cat['name'], $base]])],
@@ -262,7 +281,13 @@ function page_search(array $site, string $q): string
 function breadcrumbs(array $site, array $items): array
 {
     $l = [['@type' => 'ListItem', 'position' => 1, 'name' => 'Accueil', 'item' => 'https://' . $site['host'] . '/']];
-    foreach ($items as $i => [$n, $u]) $l[] = ['@type' => 'ListItem', 'position' => $i + 2, 'name' => $n, 'item' => 'https://' . $site['host'] . $u];
+    foreach ($items as $it) {
+        if (!is_array($it)) continue;
+        $n = trim(html_entity_decode(strip_tags((string)($it[0] ?? '')), ENT_QUOTES, 'UTF-8'));
+        $u = (string)($it[1] ?? '');
+        if ($n === '' || $u === '') continue;
+        $l[] = ['@type' => 'ListItem', 'position' => count($l) + 1, 'name' => $n, 'item' => 'https://' . $site['host'] . $u];
+    }
     return ['@context' => 'https://schema.org', '@type' => 'BreadcrumbList', 'itemListElement' => $l];
 }
 
@@ -356,6 +381,7 @@ function page_post(array $site, array $p): string
     $html = insert_before_h2($html, 2, ad_unit($site, 'in_article'));
     $html = insert_before_h2($html, 4, amazon_box($site, json_decode((string)$p['products'], true) ?: []));
     $html = insert_before_h2($html, 6, ad_unit($site, 'in_article'));
+    if ($gq = (string)setting('gyg_q:' . $site['host'], '')) $html = insert_before_h2($html, 5, gyg_box($gq, $site['host'] . '-article'));
 
     $faq = json_decode((string)$p['faq'], true) ?: [];
     $faqHtml = '';
@@ -512,4 +538,96 @@ function jobs_css(): string
     . ".jhome-stats{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 4px}.jhome-stats div{background:#fff;border:1px solid #dfe9f5;border-radius:12px;padding:8px 14px;font-size:.9rem;color:var(--m)}.jhome-stats b{display:block;font-size:1.25rem;color:var(--c);font-weight:800}"
     . ".jobs table th{background:var(--s)}.jobs .box{border-radius:14px}"
     . "@media(max-width:700px){.jobs .jhome{padding:18px 16px 12px;border-radius:14px}.jsum{padding:16px}.jdesc{padding:4px 16px 14px}.jbtn{display:block;text-align:center}}";
+}
+
+// En-tête complet des sites d'emploi : barre de recherche mise en avant, menu principal à sous-menus (desktop), tiroir latéral (mobile).
+function jobs_header(array $site, string $lg, string $navJobs): string
+{
+    $reg = $cit = '';
+    if (preg_match('#<b>Par région</b>(.*?)(?:<b>Grandes villes</b>(.*?))?</nav></details>#s', $navJobs, $mm)) { $reg = $mm[1]; $cit = $mm[2] ?? ''; }
+    $csp = str_contains($navJobs, '/emploi-public/');
+    $uri = (string)($_SERVER['REQUEST_URI'] ?? '/');
+    $cur = fn(string $p) => str_starts_with($uri, $p) ? ' aria-current="page"' : '';
+    $cons = '';
+    foreach (array_slice(site_categories($site), 0, 8) as $c) $cons .= '<a href="/category/' . h($c['slug']) . '/"' . $cur('/category/' . $c['slug'] . '/') . '>' . h(nav_label($c['name'])) . '</a>';
+    $q = $uri && str_starts_with($uri, '/chercher/') ? (string)($_GET['q'] ?? '') : '';
+    $l = $uri && str_starts_with($uri, '/chercher/') ? (string)($_GET['l'] ?? '') : '';
+    $ico = fn(string $d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
+    $iS = $ico('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>');
+    $iP = $ico('<path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>');
+    $sub = fn(string $id, string $label, string $panel, string $cls = '') => '<li class="sub' . $cls . '"><button type="button" class="jh-i" aria-expanded="false" aria-controls="' . $id . '">' . $label . '</button><div class="jh-mp" id="' . $id . '">' . $panel . '</div></li>';
+
+    $offres = '<div class="jh-cols"><div><h5>Accès rapide</h5><a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($csp ? '<a href="/emploi-public/">Emploi public</a>' : '') . '<a href="/emploi/">Offres par métier</a><a href="/recruteur/">Entreprises qui recrutent</a><a href="/chercher/">Recherche avancée</a><h5 style="margin-top:14px">Par contrat</h5><a href="/emploi-cdi/">CDI</a><a href="/emploi-cdd/">CDD</a><a href="/interim/">Intérim</a><a href="/alternance/">Alternance</a></div>'
+        . ($reg ? '<div><h5>Par région</h5><div class="two">' . $reg . '</div></div>' : '')
+        . ($cit ? '<div><h5>Grandes villes</h5><div class="two">' . $cit . '</div></div>' : '') . '</div>';
+    $metiers = '<h5>Métiers</h5><a href="/emploi/">Offres par métier</a><a href="/salaire/">Salaires par métier</a><a href="/barometre-emploi/">Baromètre de l\'emploi</a>';
+
+    $nav = $sub('jh-p1', 'Offres d\'emploi', $offres, ' mega')
+        . $sub('jh-p4', 'Alternance', '<h5>Alternance</h5><a href="/alternance/"><strong>Offres en alternance</strong></a><a href="/formation-alternance/">Formations en alternance</a><a href="/entreprises-alternance/">Entreprises qui recrutent en alternance</a><a href="/mission-locale/">Missions locales (16-25 ans)</a>')
+        . ($csp ? '<li><a class="jh-i" href="/emploi-public/"' . $cur('/emploi-public/') . '>Emploi public</a></li>' : '')
+        . $sub('jh-p2', 'Métiers &amp; salaires', $metiers)
+        . '<li><a class="jh-i" href="/recruteur/"' . $cur('/recruteur/') . '>Entreprises</a></li>'
+        . ($cons ? $sub('jh-p3', 'Conseils', '<h5>Conseils emploi</h5>' . $cons, ' r') : '');
+
+    return '<header class="jh"><div class="w jh-top">'
+        . '<a class="jh-logo" href="/" aria-label="' . h($site['name']) . ' — accueil"><img src="' . h($lg) . '" alt="' . h($site['name']) . '" width="288" height="70" fetchpriority="high"></a>'
+        . '<form class="jh-s" action="/chercher/" method="get" role="search">'
+        . '<label class="jh-q">' . $iS . '<input type="search" name="q" value="' . h($q) . '" placeholder="Métier, mot-clé, entreprise" aria-label="Métier, mot-clé ou entreprise"></label>'
+        . '<label class="jh-l">' . $iP . '<input type="text" name="l" value="' . h($l) . '" placeholder="Ville, département, région" aria-label="Lieu"></label>'
+        . '<button type="submit" aria-label="Rechercher">' . $iS . '<span>Rechercher</span></button></form>'
+        . '<button type="button" class="jh-burger" aria-expanded="false" aria-controls="jh-bar">' . $ico('<path d="M4 7h16M4 12h16M4 17h16"/>') . '<span>Menu</span></button></div>'
+        . '<div class="jh-ov" data-jh-close></div>'
+        . '<div class="jh-bar" id="jh-bar"><div class="jh-bh"><strong>Menu</strong><button type="button" data-jh-close aria-label="Fermer le menu">✕</button></div>'
+        . '<nav class="jh-nav" aria-label="Menu principal"><ul>' . $nav . '</ul></nav></div></header>'
+        . '<script>(function(){var b=document.body,h=document.querySelector(".jh");if(!h)return;var bu=h.querySelector(".jh-burger");'
+        . 'function cl(x){h.querySelectorAll("li.sub.open").forEach(function(l){if(l!==x){l.classList.remove("open");l.firstChild.setAttribute("aria-expanded","false")}})}'
+        . 'h.querySelectorAll("li.sub>.jh-i").forEach(function(t){t.addEventListener("click",function(){var l=t.parentNode,o=!l.classList.contains("open");cl(l);l.classList.toggle("open",o);t.setAttribute("aria-expanded",o)})});'
+        . 'function tg(o){b.classList.toggle("jh-open",o);bu.setAttribute("aria-expanded",o)}bu.addEventListener("click",function(){tg(!b.classList.contains("jh-open"))});'
+        . 'h.querySelectorAll("[data-jh-close]").forEach(function(x){x.addEventListener("click",function(){tg(false)})});'
+        . 'document.addEventListener("click",function(e){if(!h.querySelector(".jh-nav").contains(e.target))cl(null)});'
+        . 'document.addEventListener("keydown",function(e){if(e.key==="Escape"){cl(null);tg(false)}})})()</script>';
+}
+
+function jobs_header_css(): string
+{
+    return '.jh{background:#fff;border-bottom:1px solid var(--b);position:relative;z-index:60}'
+        . '.jh-top{display:flex;align-items:center;gap:28px;padding:14px 16px}.jh-logo{flex:none}.jh-logo img{height:58px;width:auto;display:block}'
+        . '.jh-s{flex:1;display:flex;align-items:stretch;max-width:680px;margin-left:auto;border:2px solid var(--c);border-radius:14px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.07);overflow:hidden;transition:box-shadow .2s}'
+        . '.jh-s:focus-within{box-shadow:0 0 0 4px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.07)}'
+        . '.jh-s label{flex:1 1 0;display:flex;align-items:center;gap:8px;padding:0 14px;min-width:0;cursor:text}.jh-s .jh-q{flex-grow:1.4}.jh-s label+label{border-left:1px solid var(--b)}'
+        . '.jh-s svg{flex:none;width:19px;height:19px;color:var(--m)}'
+        . '.jh-s input{border:0;outline:0;font:inherit;font-size:.95rem;padding:13px 0;width:100%;min-width:0;background:transparent;color:var(--t)}'
+        . '.jh-s button{flex:none;display:flex;align-items:center;gap:8px;border:0;background:var(--c);color:#fff;font:inherit;font-weight:700;font-size:.95rem;padding:0 22px;cursor:pointer}.jh-s button svg{color:#fff}.jh-s button:hover{filter:brightness(1.12)}'
+        . '.jh-burger{display:none}.jh-ov,.jh-bh{display:none}'
+        . '.jh-bar{background:var(--c)}.jh-nav>ul{list-style:none;margin:0 auto;padding:0 16px;max-width:1140px;display:flex;flex-wrap:wrap}'
+        . '.jh-nav li{position:relative}'
+        . '.jh-i{display:flex;align-items:center;gap:8px;color:#fff;text-decoration:none;font:inherit;font-size:.95rem;font-weight:600;padding:12px 16px;background:none;border:0;cursor:pointer;white-space:nowrap}'
+        . '.jh-i:hover,.jh-nav li.open>.jh-i,.jh-i[aria-current]{background:rgba(255,255,255,.16);color:#fff}'
+        . '.sub>.jh-i:after{content:"";width:6px;height:6px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .2s}.sub.open>.jh-i:after{transform:translateY(2px) rotate(-135deg)}'
+        . '.jh-mp{display:none;position:absolute;left:0;top:100%;background:#fff;color:var(--t);border:1px solid var(--b);border-radius:0 0 12px 12px;box-shadow:0 18px 40px rgba(0,0,0,.16);padding:18px 22px;z-index:70;min-width:270px;line-height:1.4}'
+        . '.jh-nav li.open>.jh-mp{display:block}.jh-nav li.r>.jh-mp{left:auto;right:0}.jh-nav li.mega>.jh-mp{width:min(880px,94vw)}'
+        . '.jh-mp h5{margin:0 0 8px;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--c)}'
+        . '.jh-mp a{display:block;color:var(--t);text-decoration:none;padding:5px 0;font-size:.92rem}.jh-mp a:hover,.jh-mp a[aria-current]{color:var(--c)}'
+        . '.jh-cols{display:grid;grid-template-columns:200px 1fr 1fr;gap:28px}.jh-cols .two{columns:2;column-gap:22px}.jh-cols .two a{break-inside:avoid}'
+        . '@media(hover:hover) and (min-width:961px){.jh-nav li.sub:hover>.jh-mp{display:block}.jh-nav li.sub:hover>.jh-i{background:rgba(255,255,255,.16)}}'
+        . '@media(max-width:960px){'
+        . '.jh-top{flex-wrap:wrap;gap:10px 14px;padding:10px 16px 12px}.jh-logo img{height:44px}'
+        . '.jh-burger{display:inline-flex;align-items:center;gap:6px;margin-left:auto;border:1px solid var(--b);background:#fff;border-radius:10px;padding:8px 12px;font:inherit;font-weight:600;font-size:.9rem;color:var(--t);cursor:pointer}.jh-burger svg{width:22px;height:22px}'
+        . '.jh-s{order:3;flex:1 1 100%;max-width:none;margin:0}'
+        . '.jh-bar{position:fixed;top:0;right:0;bottom:0;width:min(360px,88vw);background:#fff;overflow-y:auto;transform:translateX(105%);transition:transform .25s ease;z-index:95;box-shadow:-10px 0 30px rgba(0,0,0,.2)}'
+        . 'body.jh-open{overflow:hidden}body.jh-open .jh-bar{transform:none}'
+        . '.jh-bh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--c);color:#fff}.jh-bh button{background:none;border:0;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1;padding:4px 8px}'
+        . '.jh-ov{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .25s;z-index:90}body.jh-open .jh-ov{opacity:1;pointer-events:auto}'
+        . '.jh-nav>ul{flex-direction:column;padding:0}.jh-nav li{border-bottom:1px solid var(--b)}'
+        . '.jh-i{width:100%;justify-content:space-between;color:var(--t);padding:15px 18px;font-size:1rem}.jh-i:hover,.jh-nav li.open>.jh-i,.jh-i[aria-current]{background:var(--s);color:var(--c)}'
+        . '.jh-mp,.jh-nav li.mega>.jh-mp{position:static;width:auto;min-width:0;box-shadow:none;border:0;border-radius:0;padding:4px 18px 16px 26px}'
+        . '.jh-cols{grid-template-columns:1fr;gap:16px}.jh-mp a{padding:7px 0;font-size:.95rem}}'
+        . '@media(max-width:600px){.jh-s .jh-l{display:none}.jh-s button{padding:0 16px}.jh-s button span{display:none}.jh-s input{font-size:1rem}}';
+}
+
+// Encart GetYourGuide générique (activités par mot-clé, partenaire EJ5XM8I). Réglage par site : setting gyg_q:<hôte>.
+function gyg_box(string $q, string $cmp, string $title = 'Visites et activités à réserver'): string
+{
+    return '<section class="gyg" style="margin:28px 0"><h3>' . h($title) . '</h3><div data-gyg-widget="activities" data-gyg-partner-id="EJ5XM8I" data-gyg-locale-code="fr-FR" data-gyg-currency="EUR" data-gyg-number-of-items="3" data-gyg-q="' . h($q) . '" data-gyg-cmp="' . h($cmp) . '"></div>'
+        . '<p class="disc">Liens partenaires GetYourGuide : nous percevons une commission sur les réservations, sans surcoût pour vous.</p><script async defer src="https://widget.getyourguide.com/dist/pa.umd.production.min.js" data-gyg-partner-id="EJ5XM8I"></script></section>';
 }

@@ -1,0 +1,5 @@
+[{"host": "bretagne.decouverte.org", "name": "Découverte Bretagne", "tagline": "Que faire en Bretagne : lieux, plages, îles, patrimoine et sorties, commune par commune",
+  "niche": "Guide pratique de la Bretagne (Côtes-d'Armor, Finistère, Ille-et-Vilaine, Morbihan) : idées de visites, plages, îles, randonnées et sentier des douaniers GR34, patrimoine (enclos paroissiaux, chapelles, phares, mégalithes), fêtes et festivals, culture bretonne, conseils de séjour selon la saison. Ton concret et chaleureux, informations vérifiables, jamais de chiffres inventés.",
+  "seeds": ["que faire en bretagne", "plus belles plages de bretagne", "îles bretonnes à visiter", "gr34 sentier des douaniers", "enclos paroissiaux finistère", "plus beaux villages de bretagne", "que faire en bretagne quand il pleut", "fest-noz bretagne", "visiter le golfe du morbihan", "côte de granit rose"],
+  "categories": ["Idées de visites", "Plages et littoral", "Îles", "Randonnées", "Patrimoine", "Fêtes et traditions", "Préparer son séjour"],
+  "color": "#0a5c8f", "per_day": 2, "min_words": 1200, "ymyl": 0, "amazon": 0}]

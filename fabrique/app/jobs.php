@@ -15,6 +15,27 @@ const JOB_REGIONS = [
 const JOB_CONTRACTS = ['cdi' => 'CDI', 'cdd' => 'CDD', 'interim' => 'Intérim', 'alternance' => 'Alternance', 'stage' => 'Stage', 'freelance' => 'Indépendant', 'autre' => 'Autre'];
 // Fiches pauvres (extrait Adzuna, description très courte) : affichées mais exclues de l'index et des sitemaps.
 const JOB_INDEXABLE_SQL = "id NOT LIKE 'az-%' AND length(description) >= 300";
+// Filtre ?contrat= des pages ville / métier / employeur (pages filtrées en noindex, cache par contrat).
+function job_contract_filter(): string { $c = (string)($_GET['contrat'] ?? ''); return isset(JOB_CONTRACTS[$c]) ? $c : ''; }
+function job_contract_of(array $j): string { $c = (string)($j['contract'] ?? ''); return isset(JOB_CONTRACTS[$c]) ? $c : 'autre'; }
+function job_contract_counts(array $jobs): array { $o = []; foreach ($jobs as $j) { $k = job_contract_of($j); $o[$k] = ($o[$k] ?? 0) + 1; } arsort($o); return $o; }
+function job_contract_chips(array $counts, string $base, string $active): string
+{
+    if (!$counts) return '';
+    $t = array_sum($counts); $o = '';
+    $o .= '<a href="' . h($base) . '#offres"' . ($active === '' ? ' aria-current="true" style="border-color:var(--c);background:var(--c);color:#fff"' : '') . '>Toutes <b' . ($active === '' ? ' style="color:#fff"' : '') . '>' . number_format($t, 0, ',', ' ') . '</b></a>';
+    foreach ($counts as $k => $n) {
+        $on = $active === $k;
+        $o .= '<a href="' . h($base) . '?contrat=' . h((string)$k) . '#offres" rel="nofollow"' . ($on ? ' aria-current="true" style="border-color:var(--c);background:var(--c);color:#fff"' : '') . '>' . h(JOB_CONTRACTS[$k] ?? ucfirst((string)$k)) . ' <b' . ($on ? ' style="color:#fff"' : '') . '>' . number_format((int)$n, 0, ',', ' ') . '</b></a>';
+    }
+    return '<div class="cnt">' . $o . '</div>';
+}
+function job_filter_contract(array $jobs, string $c): array { return $c === '' ? $jobs : array_values(array_filter($jobs, fn($j) => job_contract_of($j) === $c)); }
+function job_contract_page(string $c): string { return ['cdi' => '/emploi-cdi/', 'cdd' => '/emploi-cdd/', 'interim' => '/interim/', 'alternance' => '/alternance/'][$c] ?? ''; }
+
+// Mots-clés Careerjet d'une offre : intitulé nettoyé (sans H/F, sans parenthèses), 4 mots max.
+function job_cj_kw(array $j): string { $t = preg_replace(['~\(.*?\)|\[.*?\]~u', '~\b[hf]\s*/\s*[hf]\b~iu', '~\s[-–—|/]\s.*$~u', '~\s+~u'], [' ', ' ', '', ' '], (string)$j['title']); return implode(' ', array_slice(preg_split('~\s+~u', trim($t), -1, PREG_SPLIT_NO_EMPTY), 0, 4)); }
+
 function job_is_thin(array $j): bool { return str_starts_with((string)$j['id'], 'az-') || mb_strlen((string)$j['description']) < 300; }
 const JOB_CITY_MIN = 20; // nombre minimal d'offres ouvertes pour qu'une ville ait sa page
 
@@ -26,12 +47,13 @@ function jobs_db(string $host): PDO
         $db->exec("CREATE TABLE IF NOT EXISTS jobs(
             id TEXT PRIMARY KEY, src TEXT, slug TEXT, title TEXT, company TEXT, description TEXT, city TEXT, postal TEXT,
             region TEXT, contract TEXT, contract_label TEXT, worktime TEXT, salary TEXT, experience TEXT, sector TEXT, url TEXT,
-            created_at TEXT, seen_at TEXT, status TEXT DEFAULT 'open');
+            created_at TEXT, seen_at TEXT, status TEXT DEFAULT 'open', verified_at TEXT, updated_at TEXT);
         CREATE INDEX IF NOT EXISTS ix_jobs_reg ON jobs(status, region, created_at);
         CREATE INDEX IF NOT EXISTS ix_jobs_slug ON jobs(slug);
         CREATE TABLE IF NOT EXISTS job_cities(slug TEXT PRIMARY KEY, name TEXT, region TEXT, n INTEGER, raw TEXT, updated TEXT);
         CREATE INDEX IF NOT EXISTS ix_job_cities_reg ON job_cities(region, n);");
         $init[$host] = 1;
+        if (function_exists('jx_schema')) jx_schema($db);
     }
     return $db;
 }
@@ -125,8 +147,17 @@ function ft_fetch(string $token, string $region, int $max = 300): array
     for ($start = 0; $start < $max; $start += 150) {
         $j = http_get_json('https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?sort=1&region=' . $region . '&range=' . $start . '-' . ($start + 149),
             ['Authorization: Bearer ' . $token, 'Accept: application/json']);
-        foreach ($j['resultats'] ?? [] as $o) {
-            $out[] = [
+        foreach ($j['resultats'] ?? [] as $o) $out[] = ft_map($o, $region);
+        if (count($j['resultats'] ?? []) < 150) break;
+        usleep(400000);
+    }
+    return $out;
+}
+
+// Offre France Travail (recherche ou détail) -> ligne de la table jobs.
+function ft_map(array $o, string $region): array
+{
+            return [
                 'id' => 'ft-' . $o['id'], 'src' => 'France Travail', 'title' => $o['intitule'] ?? '', 'company' => $o['entreprise']['nom'] ?? '',
                 'description' => $o['description'] ?? '', 'city' => preg_replace('/^\d+\s*-\s*/', '', (string)($o['lieuTravail']['libelle'] ?? '')),
                 'postal' => $o['lieuTravail']['codePostal'] ?? '', 'region' => $region, 'contract' => contract_key(($o['typeContrat'] ?? '') . ' ' . ($o['natureContrat'] ?? '')),
@@ -134,12 +165,8 @@ function ft_fetch(string $token, string $region, int $max = 300): array
                 'salary' => $o['salaire']['libelle'] ?? '', 'experience' => $o['experienceLibelle'] ?? '', 'sector' => $o['secteurActiviteLibelle'] ?? ($o['romeLibelle'] ?? ''),
                 'url' => $o['origineOffre']['urlOrigine'] ?? ('https://candidat.francetravail.fr/offres/recherche/detail/' . $o['id']),
                 'created_at' => gmdate('Y-m-d H:i:s', strtotime($o['dateCreation'] ?? 'now')),
+                '_rome' => (string)($o['romeCode'] ?? ''), '_lat' => isset($o['lieuTravail']['latitude']) ? (float)$o['lieuTravail']['latitude'] : null, '_lon' => isset($o['lieuTravail']['longitude']) ? (float)$o['lieuTravail']['longitude'] : null,
             ];
-        }
-        if (count($j['resultats'] ?? []) < 150) break;
-        usleep(400000);
-    }
-    return $out;
 }
 
 function adzuna_fetch(string $region, int $pages = 1): array // plan gratuit : ~250 appels/jour → 18 régions × 1 page × 8 synchros
@@ -177,12 +204,16 @@ function jobs_sync(array $site, callable $log): array
     $maxRow = (int)$db->query('SELECT COALESCE(MAX(rowid),0) FROM jobs')->fetchColumn();
     $up = $db->prepare("INSERT INTO jobs(id,src,slug,title,company,description,city,postal,region,contract,contract_label,worktime,salary,experience,sector,url,created_at,seen_at,status)
         VALUES(:id,:src,:slug,:title,:company,:description,:city,:postal,:region,:contract,:contract_label,:worktime,:salary,:experience,:sector,:url,:created_at,:seen,'open')
-        ON CONFLICT(id) DO UPDATE SET seen_at=excluded.seen_at, status='open', title=excluded.title, description=excluded.description, salary=excluded.salary, url=excluded.url");
+        ON CONFLICT(id) DO UPDATE SET seen_at=excluded.seen_at, status='open',
+            updated_at=CASE WHEN jobs.status<>'open' OR jobs.title IS NOT excluded.title OR jobs.description IS NOT excluded.description OR jobs.salary IS NOT excluded.salary THEN excluded.seen_at ELSE jobs.updated_at END,
+            title=excluded.title, description=excluded.description, salary=excluded.salary, url=excluded.url");
+    $romeIns = $db->prepare('INSERT OR REPLACE INTO job_rome(id,rome,lat,lon) VALUES(?,?,?,?)');
     foreach (array_keys(JOB_REGIONS) as $reg) {
         $reg = (string)$reg;
         $offers = array_merge($tok ? ft_fetch($tok, $reg) : [], adzuna_fetch($reg));
         $db->beginTransaction();
         foreach ($offers as $o) {
+            if (array_key_exists('_rome', $o)) { if ($o['_rome'] !== '' || $o['_lat'] !== null) $romeIns->execute([$o['id'], $o['_rome'], $o['_lat'], $o['_lon']]); unset($o['_rome'], $o['_lat'], $o['_lon']); }
             if ($o['title'] === '' || $o['url'] === '') continue;
             $o['slug'] = slugify($o['title'] . ' ' . $o['city'], 70) . '-' . substr(md5($o['id']), 0, 6);
             $o['seen'] = $now;
@@ -192,8 +223,7 @@ function jobs_sync(array $site, callable $log): array
         $db->commit();
         $log(JOB_REGIONS[$reg][1] . ' : ' . count($offers) . ' offres');
     }
-    $closing = $db->query("SELECT slug FROM jobs WHERE status='open' AND seen_at < datetime('now','-3 days')")->fetchAll(PDO::FETCH_COLUMN);
-    $db->exec("UPDATE jobs SET status='closed' WHERE status='open' AND seen_at < datetime('now','-3 days')");
+    $closing = jobs_close_stale($site, $db, $log);
     // offres expirées conservées un an (titre, lieu, contrat) pour rediriger les anciens liens (ChatGPT, partages) vers une offre proche ;
     // la description, volumineuse, est vidée après 40 jours.
     $db->exec("UPDATE jobs SET description='' WHERE status='closed' AND description<>'' AND seen_at < datetime('now','-40 days')");
@@ -203,11 +233,41 @@ function jobs_sync(array $site, callable $log): array
     $cities = jobs_cities_build($db);
     $companies = companies_build($db);
     $cache = jobs_cache_refresh($site, $db); // on garde les fiches d'offres ouvertes en cache, on purge le reste
-    foreach (glob(cfg('data_dir') . '/cache/' . $site['host'] . '.*.xml') ?: [] as $f) @unlink($f); // sitemaps
-    $pinged = jobs_indexnow($site, $db, $fresh, $closing);
+    foreach (glob(cfg('data_dir') . '/cache/' . $site['host'] . '.*.xml') ?: [] as $f) @touch($f, 1); // sitemaps : périmés, l'ancien reste servi pendant la reconstruction
+    $st = $db->prepare("SELECT slug FROM jobs WHERE status='open' AND updated_at = ?"); $st->execute([$now]);
+    $changed = $st->fetchAll(PDO::FETCH_COLUMN);
+    $pinged = jobs_indexnow($site, $db, array_merge($fresh, $changed), $closing);
     $warm = jobs_cache_warm($site);
     return ['upserted' => $n, 'open' => (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open'")->fetchColumn(),
-        'new' => count($fresh), 'closed' => count($closing), 'cities' => $cities, 'companies' => $companies, 'cache' => $cache, 'warmed' => $warm, 'indexnow' => $pinged];
+        'new' => count($fresh), 'changed' => count($changed), 'closed' => count($closing), 'cities' => $cities, 'companies' => $companies, 'cache' => $cache, 'warmed' => $warm, 'indexnow' => $pinged];
+}
+
+// Ferme les offres non revues depuis 3 jours (et non confirmées par l'API depuis 4 jours, cf. cli/ft_verify.php).
+// Garde-fou par source (ft-, az-, csp-, lba-) : rien n'est fermé si la source n'a rien livré depuis 2 jours
+// (panne, jeton expiré) ou si la fermeture toucherait plus de 30 % de ses offres ouvertes.
+function jobs_close_stale(array $site, PDO $db, callable $log): array
+{
+    $cond = "status='open' AND seen_at < datetime('now','-3 days') AND (verified_at IS NULL OR verified_at < datetime('now','-4 days'))";
+    $src = "substr(id,1,instr(id,'-'))";
+    $stats = $db->query("SELECT $src AS p, COUNT(*) AS n, SUM($cond) AS c, MAX(seen_at) AS last FROM jobs WHERE status='open' GROUP BY p")->fetchAll();
+    $closing = [];
+    foreach ($stats as $r) {
+        $p = (string)$r['p']; $n = (int)$r['n']; $c = (int)$r['c'];
+        if ($c === 0 || $p === '') continue;
+        $why = '';
+        if ((string)$r['last'] < gmdate('Y-m-d H:i:s', time() - 2 * 86400)) $why = "aucune offre reçue depuis le {$r['last']}";
+        elseif ($c > 500 && $c > 0.3 * $n) $why = "$c fermetures sur $n offres ouvertes (> 30 %)";
+        if ($why !== '') {
+            $log("fermeture suspendue pour {$p}* : $why");
+            $k = 'close_alert_' . $p . gmdate('Ymd');
+            if (setting($k, '') === '') { setting_set($k, '1'); alert_mail($site['host'] . " : fermeture d'offres suspendue ({$p}*)", "Source {$p}* : $why.\nAucune offre de cette source n'a été fermée. Vérifier la synchronisation (clés API, quota, panne)."); }
+            continue;
+        }
+        $st = $db->prepare("SELECT slug FROM jobs WHERE $cond AND $src = ?"); $st->execute([$p]);
+        $closing = array_merge($closing, $st->fetchAll(PDO::FETCH_COLUMN));
+        $db->prepare("UPDATE jobs SET status='closed' WHERE $cond AND $src = ?")->execute([$p]);
+    }
+    return $closing;
 }
 
 // Signale à IndexNow (Bing, Yandex… ; Bing alimente la recherche de ChatGPT) les URL qui ont changé.
@@ -215,15 +275,21 @@ function jobs_indexnow(array $site, PDO $db, array $fresh, array $closed): int
 {
     if (!function_exists('indexnow_ping')) return 0;
     $b = 'https://' . $site['host'];
-    $urls = [$b . '/offres-emploi/'];
-    foreach (JOB_REGIONS as [$s]) $urls[] = $b . '/offres-emploi/' . $s . '/';
-    foreach ($db->query('SELECT slug FROM job_cities') as $r) $urls[] = $b . '/offres-emploi/ville/' . $r['slug'] . '/';
+    $urls = [];
     foreach (array_merge($fresh, $closed) as $s) $urls[] = $b . '/offre/' . $s . '/';
-    $urls[] = $b . '/recruteur/';
-    try { foreach ($db->query('SELECT slug FROM job_companies WHERE n > 0 ORDER BY n DESC LIMIT 300') as $r) $urls[] = $b . '/recruteur/' . $r['slug'] . '/'; } catch (Throwable $e) {}
+    $day = 'indexnow_synth_' . $site['host'];
+    if (setting($day, '') !== gmdate('Y-m-d')) { // pages de synthèse (listes régionales, villes, employeurs) : une fois par jour suffit
+        setting_set($day, gmdate('Y-m-d'));
+        $urls[] = $b . '/offres-emploi/';
+        foreach (JOB_REGIONS as [$s]) $urls[] = $b . '/offres-emploi/' . $s . '/';
+        foreach ($db->query('SELECT slug FROM job_cities') as $r) $urls[] = $b . '/offres-emploi/ville/' . $r['slug'] . '/';
+        $urls[] = $b . '/recruteur/';
+        try { foreach ($db->query('SELECT slug FROM job_companies WHERE n > 0 ORDER BY n DESC LIMIT 300') as $r) $urls[] = $b . '/recruteur/' . $r['slug'] . '/'; } catch (Throwable $e) {}
+    }
     $urls = array_values(array_unique($urls));
-    foreach (array_chunk($urls, 10000) as $chunk) { try { indexnow_ping($site, $chunk); } catch (Throwable $e) {} }
-    return count($urls);
+    $ok = 0;
+    foreach (array_chunk($urls, 10000) as $chunk) { try { $c = indexnow_ping($site, $chunk); if ($c === 200 || $c === 202) $ok += count($chunk); } catch (Throwable $e) {} }
+    return $ok; // URL effectivement acceptées par IndexNow
 }
 
 // ---------- Villes ----------
@@ -307,7 +373,7 @@ function job_card(array $j): string
     $hue = hexdec(substr(md5($coShort ?: (string)$j['title']), 0, 2)) * 360 / 255;
     $ck = (string)$j['contract'];
     $tags = '<span class="tag t-' . h($ck ?: 'autre') . '">' . h(JOB_CONTRACTS[$ck] ?? 'Offre') . '</span>';
-    if (str_starts_with((string)$j['id'], 'csp-')) $tags .= '<span class="tag t-pub">Emploi public</span>';
+    if (str_starts_with((string)($j['id'] ?? ''), 'csp-')) $tags .= '<span class="tag t-pub">Emploi public</span>' . (function_exists('comp_deadline_tag') ? comp_deadline_tag($j) : '');
     if (($s = job_salary((string)$j['salary'])) && ($m = job_salary_monthly($s)) > 900 && $m < 20000) $tags .= '<span class="tag t-sal">' . number_format(round($m / 10) * 10, 0, ',', ' ') . ' €/mois</span>';
     $loc = trim((string)$j['city']) ?: (preg_match('/—\s*(.+)$/u', $co, $mm) ? $mm[1] : '');
     return '<div class="card jc"><div class="in"><div class="jc-h"><span class="jc-logo" style="background:hsl(' . (int)$hue . ',55%,42%)" aria-hidden="true">' . h($ini) . '</span><div class="jc-t">'
@@ -363,10 +429,12 @@ function page_jobs_home(array $site): string
     $latest = $db->query("SELECT * FROM jobs WHERE status='open' ORDER BY created_at DESC LIMIT 12")->fetchAll();
     $body = '<h1 style="margin-top:28px">Offres d\'emploi par région</h1><p>' . number_format($total, 0, ',', ' ') . ' offres d\'emploi actualisées plusieurs fois par jour : CDI, CDD, intérim, alternance et stages dans toutes les régions de France.</p>'
         . (function_exists('fr_map') ? '<style>' . fr_map_css() . '</style>' . fr_map($counts, '/offres-emploi/') : '')
-        . '<h2>Offres par type de contrat</h2>' . count_chips(array_map(fn($r) => [JOB_CONTRACTS[$r['contract']] ?? ucfirst((string)$r['contract']), $r['n'], ''], $db->query("SELECT contract, COUNT(*) n FROM jobs WHERE status='open' AND contract<>'' GROUP BY contract ORDER BY n DESC")->fetchAll()))
-        . '<h2>Offres par secteur d\'activité</h2>' . count_chips(array_map(fn($r) => [$r['sector'], $r['n'], ''], $db->query("SELECT sector, COUNT(*) n FROM jobs WHERE status='open' AND sector<>'' GROUP BY sector ORDER BY n DESC LIMIT 20")->fetchAll()))
+        . '<h2>Offres par type de contrat</h2>' . count_chips(array_map(fn($r) => [JOB_CONTRACTS[$r['contract']] ?? ucfirst((string)$r['contract']), $r['n'], job_contract_page((string)$r['contract']) ?: '/chercher/?contrat=' . rawurlencode((string)$r['contract'])], $db->query("SELECT contract, COUNT(*) n FROM jobs WHERE status='open' AND contract<>'' GROUP BY contract ORDER BY n DESC")->fetchAll()))
+        . '<h2>Offres par secteur d\'activité</h2>' . count_chips(array_map(fn($r) => [$r['sector'], $r['n'], '/chercher/?secteur=' . rawurlencode((string)$r['sector'])], $db->query("SELECT sector, COUNT(*) n FROM jobs WHERE status='open' AND sector<>'' GROUP BY sector ORDER BY n DESC LIMIT 20")->fetchAll()))
         . (function_exists('intents_chips') ? intents_chips($db) : '')
         . (function_exists('csp_tables') && ($np = (int)$db->query("SELECT COUNT(*) FROM jobs WHERE status='open' AND id LIKE 'csp-%'")->fetchColumn()) ? '<p><a href="/emploi-public/"><strong>Emploi public : ' . number_format($np, 0, ',', ' ') . ' offres de la fonction publique →</strong></a></p>' : '')
+        . (function_exists('page_proches') ? '<p><a href="/emploi-pres-de-chez-moi/"><strong>📍 Offres d\'emploi près de chez moi, triées par distance →</strong></a></p>' : '')
+        . (function_exists('fx_route') ? '<p><a href="/emploi-frontalier/"><strong>Emploi frontalier : Suisse, Luxembourg, Belgique →</strong></a></p>' : '')
         . '<h2>Offres d\'emploi par région</h2><div class="grid">' . $regs . '</div>'
         . ($topCities ? '<h2>Villes qui recrutent le plus</h2><p>' . city_links($topCities) . '.</p>' : '')
         . '<h2>Dernières offres publiées</h2><div class="grid">' . implode('', array_map('job_card', $latest)) . '</div>' . jobs_disclaimer();
@@ -379,14 +447,18 @@ function page_jobs_region(array $site, array $reg, int $page, string $contract):
     $per = 30;
     $where = "status='open' AND region=?" . ($contract ? ' AND contract=?' : '');
     $args = $contract ? [$reg['code'], $contract] : [$reg['code']];
+    $jfa = function_exists('jf_active') && jf_active();
+    [$fw, $fa, $ford] = $jfa ? jf_sql(jf_get()) : ['', [], 'created_at DESC'];
+    $where .= $fw; $args = array_merge($args, $fa);
     $st = $db->prepare("SELECT COUNT(*) FROM jobs WHERE $where"); $st->execute($args);
     $total = (int)$st->fetchColumn();
-    if (!$total) return '';
-    $st = $db->prepare("SELECT * FROM jobs WHERE $where ORDER BY created_at DESC LIMIT $per OFFSET " . (($page - 1) * $per)); $st->execute($args);
+    if (!$total && !$jfa) return '';
+    $st = $db->prepare("SELECT * FROM jobs WHERE $where ORDER BY $ford LIMIT $per OFFSET " . (($page - 1) * $per)); $st->execute($args);
     $jobs = $st->fetchAll();
-    if (!$jobs) return '';
+    if (!$jobs && !$jfa) return '';
     $base = '/offres-emploi/' . $reg['slug'] . '/';
-    $chips = '<p>' . implode(' ', array_map(fn($k, $l) => '<a class="kick" style="margin-right:10px" href="' . $base . '?contrat=' . $k . '" rel="nofollow">' . $l . '</a>', array_keys(JOB_CONTRACTS), JOB_CONTRACTS)) . '</p>';
+    $st = $db->prepare("SELECT DISTINCT contract FROM jobs WHERE status='open' AND region=?"); $st->execute([$reg['code']]); $have = array_flip($st->fetchAll(PDO::FETCH_COLUMN));
+    $chips = '<p>' . implode(' ', array_map(fn($k, $l) => '<a class="kick" style="margin-right:10px" href="' . $base . '?contrat=' . $k . '" rel="nofollow">' . $l . '</a>', array_keys(array_intersect_key(JOB_CONTRACTS, $have)), array_intersect_key(JOB_CONTRACTS, $have))) . '</p>';
     jobs_cities_ready($db);
     $st = $db->prepare('SELECT slug, name, n FROM job_cities WHERE region=? ORDER BY n DESC LIMIT 20'); $st->execute([$reg['code']]);
     $cityRows = $st->fetchAll();
@@ -399,8 +471,10 @@ function page_jobs_region(array $site, array $reg, int $page, string $contract):
     $title = 'Offres d\'emploi ' . $reg['name'] . ($contract ? ' en ' . JOB_CONTRACTS[$contract] : '');
     $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/offres-emploi/">Offres d\'emploi</a> › ' . h($reg['name']) . '</p>'
         . '<h1>' . h($title) . '</h1><p>' . number_format($total, 0, ',', ' ') . ' offres d\'emploi en ' . h($reg['name']) . ', mises à jour plusieurs fois par jour. Villes qui recrutent le plus : ' . $cities . '.</p>'
-        . $chips . job_grid($site, $jobs)
+        . ($page === 1 && !$jfa && function_exists('fr_dep_map') ? '<style>' . fr_map_css() . '</style>' . fr_dep_map(dep_counts($db, 'jobs j', "j.status='open' AND j.region=?", [$reg['code']]), fn(string $c) => $base . '?dep=' . $c, 'offres', array_keys(jf_region_deps($reg['code'])), 'Cliquez sur un département pour filtrer les offres') : '')
+        . $chips . (function_exists('jf_form') ? jf_form($base, ['deps' => jf_region_deps($reg['code'])]) : '') . ($jobs ? job_grid($site, $jobs) : jf_empty())
         . pager($base, $page, (int)ceil($total / $per))
+        . (function_exists('alerts_box') ? '<div style="max-width:520px;margin:24px 0">' . alerts_box($site, $reg['code']) . '</div>' : '')
         . ($guides ? '<h2>Nos conseils pour décrocher le poste</h2><ul>' . implode('', array_map(fn($g) => '<li><a href="' . h($g['path']) . '">' . h($g['title']) . '</a></li>', $guides)) . '</ul>' : '')
         . careerjet_slot($site, $contract ? JOB_CONTRACTS[$contract] : '', $reg['name'])
         . jobs_disclaimer();
@@ -422,12 +496,14 @@ function page_jobs_city(array $site, string $slug): string
     if (!$c) return '';
     $raw = json_decode((string)$c['raw'], true) ?: [];
     if (!$raw) return '';
-    $st = $db->prepare("SELECT slug,title,company,city,postal,contract,contract_label,salary,sector,worktime,created_at FROM jobs WHERE status='open' AND region=? AND city IN ("
+    $st = $db->prepare("SELECT id,slug,title,company,city,postal,contract,contract_label,salary,sector,worktime,created_at,e_sal,e_tps,e_tele,e_deb,e_dep FROM jobs WHERE status='open' AND region=? AND city IN ("
         . implode(',', array_fill(0, count($raw), '?')) . ') ORDER BY created_at DESC');
     $st->execute(array_merge([(string)$c['region']], $raw));
     $jobs = $st->fetchAll();
     $total = count($jobs);
     if ($total < 5) return '';
+    $fc = job_contract_filter(); $jobsF = job_filter_contract($jobs, $fc); if (!$jobsF) { $fc = ''; $jobsF = $jobs; }
+    $jfa = function_exists('jf_active') && jf_active(); if ($jfa) $jobsF = jf_rows($jobsF, jf_get());
     $reg = JOB_REGIONS[$c['region']] ?? ['', ''];
     $name = (string)$c['name'];
     $nf = fn($x) => number_format((float)$x, 0, ',', ' ');
@@ -479,22 +555,24 @@ function page_jobs_city(array $site, string $slug): string
         . '<h1>Offres d\'emploi à ' . h($name) . '</h1>'
         . '<p class="lead">' . $nf($total) . ' offres d\'emploi ouvertes à ' . h($name) . ' (' . h($reg[1]) . ') au ' . h($day) . ', ' . $recent . '. Chiffres calculés par ' . h($site['name']) . ' à partir des offres France Travail et Adzuna, mis à jour plusieurs fois par jour.</p>'
         . '<h2>Le marché de l\'emploi à ' . h($name) . ' en chiffres</h2>' . $tbl($facts)
-        . '<h2>Types de contrat</h2>' . $tbl(array_combine(array_map(fn($k) => JOB_CONTRACTS[$k] ?? $k, array_keys($contracts)), array_map(fn($v) => $nf($v) . ' offres (' . $pct($v) . ' %)', $contracts)))
-        . ($sectors ? '<h2>Secteurs qui recrutent à ' . h($name) . '</h2>' . $tbl(array_map(fn($v) => $nf($v) . ' offres', $sectors)) : '')
+        . '<h2>Types de contrat</h2>' . job_contract_chips(job_contract_counts($jobs), $base, $fc)
+        . ($sectors ? '<h2>Secteurs qui recrutent à ' . h($name) . '</h2>' . count_chips(array_map(fn($k, $v) => [$k, $v, '/chercher/?secteur=' . rawurlencode((string)$k) . '&l=' . rawurlencode($name)], array_keys($sectors), $sectors)) : '')
         . ($companies ? '<h2>Employeurs qui recrutent à ' . h($name) . '</h2>' . count_chips(array_map(fn($k, $v) => [company_display($k), $v, company_is_real($k) ? '/recruteur/' . company_slug($k) . '/' : ''], array_keys($companies), $companies)) : '')
         . job_ad($site)
-        . '<h2>Dernières offres d\'emploi à ' . h($name) . '</h2>' . job_grid($site, array_slice($jobs, 0, 30))
+        . '<h2 id="offres">' . ($fc || $jfa ? 'Offres' . ($fc ? ' en ' . h(JOB_CONTRACTS[$fc]) : ' sélectionnées') . ' à ' . h($name) . ' (' . count($jobsF) . ')' : 'Dernières offres d\'emploi à ' . h($name)) . '</h2>' . (function_exists('jf_form') ? jf_form($base . '#offres', ['nosect' => false]) : '') . ($jobsF ? job_grid($site, array_slice($jobsF, 0, $fc || $jfa ? 60 : 30)) : jf_empty())
         . '<p><a href="/offres-emploi/' . h($reg[0]) . '/">Toutes les offres d\'emploi en ' . h($reg[1]) . '</a></p>'
+        . (function_exists('pd_city_html') && !$jfa ? pd_city_html($db, $c) : '')
         . '<h2>Questions fréquentes</h2>' . implode('', array_map(fn($f) => '<h3>' . h($f[0]) . '</h3><p>' . h($f[1]) . '</p>', $faq))
         . ($others ? '<h2>Autres villes qui recrutent en ' . h($reg[1]) . '</h2><p>' . city_links($others) . '.</p>' : '')
         . (function_exists('lba_city_blocks') ? lba_city_blocks($site, $c) : '')
+        . (function_exists('alerts_box') ? '<div style="max-width:520px;margin:24px 0">' . alerts_box($site, (string)$c['region'], function_exists('tgb_dept_of_postal') ? tgb_dept_of_postal((string)($jobs[0]['postal'] ?? '')) : '') . '</div>' : '')
         . careerjet_slot($site, '', $name)
         . jobs_disclaimer();
     $schema = [breadcrumbs($site, [['Offres d\'emploi', '/offres-emploi/'], [$reg[1], '/offres-emploi/' . $reg[0] . '/'], ['Emploi ' . $name, $base]]),
         ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => array_map(fn($f) => ['@type' => 'Question', 'name' => $f[0], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f[1]]], $faq)]];
     $desc = $nf($total) . " offres d'emploi à $name : " . $pct($contracts['cdi'] ?? 0) . ' % en CDI' . ($med !== null ? ', salaire médian annoncé ' . $nf($med) . ' € brut/mois' : '') . ($sectors ? '. Secteurs qui recrutent : ' . implode(', ', array_slice(array_keys($sectors), 0, 3)) : '') . '.';
     return layout($site, ['title' => 'Emploi ' . $name . ' : ' . $nf($total) . ' offres, mises à jour aujourd\'hui | ' . $site['name'], 'desc' => mb_strimwidth($desc, 0, 158, '…'),
-        'canonical' => 'https://' . $site['host'] . $base, 'schema' => $schema], $body);
+        'canonical' => 'https://' . $site['host'] . $base, 'schema' => $schema, 'robots' => $fc ? 'noindex,follow' : null], $body);
 }
 
 // Offre ouverte la plus proche d'une offre expirée : mots du titre communs, même département, même contrat, même région.
@@ -570,15 +648,30 @@ function page_job(array $site, string $slug): ?string
     $seoTitle = mb_substr($j['title'], 0, 55) . ($ctr ? ' – ' . $ctr : '') . ($j['city'] !== '' ? ' à ' . $j['city'] : '') . ($salM ? ' – ' . $salM : '');
     $cityHtml = $city ? '<p><a href="/offres-emploi/ville/' . h($city['slug']) . '/">Toutes les offres d\'emploi à ' . h($city['name']) . '</a> (' . (int)$city['n'] . ' offres, salaires et secteurs qui recrutent)</p>' : '';
     $desc = trim((string)$j['description']);
+    if (function_exists('jx_clean')) $desc = jx_clean($desc);
+    $trunc = !$closed && $desc !== '' && function_exists('jx_truncated') && jx_truncated($j);
+    $fresh = '';
+    if (!$closed && function_exists('mod_on') && mod_on('complements')) {
+        $seen = strtotime((string)($j['verified_at'] ?: $j['seen_at']) . ' UTC');
+        if ($seen && $seen > time() - 4 * 86400) $fresh .= ' Toujours en ligne chez la source : vérifiée ' . h(job_ago(gmdate('Y-m-d H:i:s', $seen))) . '.';
+        try { $dk = $db->prepare('SELECT n, first_at FROM job_dups WHERE k=?'); $dk->execute([strtolower((string)$j['title']) . '|' . strtolower((string)$j['company']) . '|' . $j['postal']]);
+            if (($dd = $dk->fetch()) && (int)$dd['n'] > 1) $fresh .= ' Annonce au même intitulé, chez le même employeur et au même lieu publiée ' . (int)$dd['n'] . ' fois depuis le ' . h(date_fr((string)$dd['first_at'])) . '.';
+        } catch (Throwable $e) {}
+    }
+    $truncHtml = $trunc ? '<p class="jtrunc" style="margin:10px 0 0;padding:10px 12px;border-left:3px solid var(--c);background:rgba(127,127,127,.08);border-radius:6px">'
+        . (str_starts_with((string)$j['id'], 'az-') ? 'Ceci est un extrait de l\'annonce.' : 'La description transmise par la source semble incomplète.')
+        . ' <a href="' . h($j['url']) . '" rel="' . $rel . '" target="_blank">Lire l\'annonce complète sur le site d\'origine →</a></p>' : '';
     $body = '<div class="layout"><article><p class="crumbs"><a href="/offres-emploi/">Offres d\'emploi</a> › <a href="/offres-emploi/' . h($reg[0]) . '/">' . h($reg[1]) . '</a>'
         . ($city ? ' › <a href="/offres-emploi/ville/' . h($city['slug']) . '/">' . h($city['name']) . '</a>' : '') . '</p>'
         . '<h1>' . h($j['title']) . '</h1>'
         . ($closed ? '<p class="lead">Cette offre n\'est plus disponible' . ($recent ? ' (pourvue ou retirée par le recruteur le ' . h(date_fr((string)$j['seen_at'])) . ')' : '') . '. Voici des offres similaires encore ouvertes.</p>' . $simHtml . $cityHtml . job_ad($site) : '')
+        . (!$closed && function_exists('comp_deadline_line') ? comp_deadline_line($j) : '')
         . job_summary($j, $facts, $closed ? '' : $rel)
-        . ($desc !== '' ? '<section class="jdesc"><h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div></section>' : '')
-        . '<p class="disc">Source : ' . h($j['src']) . ($j['src'] === 'Adzuna' ? ' — Jobs by Adzuna' : '') . '. Publiée le ' . h(date_fr($j['created_at'])) . '.</p>'
-        . ($closed ? '' : job_ad($site) . (function_exists('metier_links_for_job') ? metier_links_for_job($site, $j) . metier_similar_for_job($site, $j) : '') . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
-        . '</article><aside><div class="box"><h4>Préparer sa candidature</h4><ul>'
+        . ($desc !== '' ? '<section class="jdesc"><h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div>' . $truncHtml . '</section>' : '')
+        . '<p class="disc">Source : ' . h($j['src']) . ($j['src'] === 'Adzuna' ? ' — Jobs by Adzuna' : '') . '. Publiée le ' . h(date_fr($j['created_at'])) . '.' . $fresh . '</p>'
+        . ($closed ? '' : job_ad($site) . (function_exists('jd_html') ? jd_html($site, $db, $j, $desc) : '') . (function_exists('metier_links_for_job') ? metier_links_for_job($site, $j) . metier_similar_for_job($site, $j) : '') . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
+        . (function_exists('careerjet_slot') ? careerjet_slot($site, job_cj_kw($j), (string)$j['city']) : '')
+        . '</article><aside>' . (function_exists('alerts_box') ? alerts_box($site, (string)$j['region'], function_exists('tgb_dept_of_postal') ? tgb_dept_of_postal((string)$j['postal']) : '') : '') . (!$closed && function_exists('share_box') ? share_box($site, $j) : '') . '<div class="box"><h4>Préparer sa candidature</h4><ul>'
         . implode('', array_map(fn($g) => '<li><a href="' . h($g['path']) . '">' . h($g['title']) . '</a></li>', site_db($site['host'])->query("SELECT path,title FROM posts WHERE status='publish' ORDER BY published_at DESC LIMIT 8")->fetchAll()))
         . '</ul></div></aside></div>';
     $types = ['cdi' => 'FULL_TIME', 'cdd' => 'TEMPORARY', 'interim' => 'TEMPORARY', 'alternance' => 'INTERN', 'stage' => 'INTERN', 'freelance' => 'CONTRACTOR', 'autre' => 'OTHER'];
@@ -589,7 +682,7 @@ function page_job(array $site, string $slug): ?string
             'employmentType' => $types[$j['contract']] ?? 'OTHER', 'hiringOrganization' => ['@type' => 'Organization', 'name' => $j['company'] ?: 'Entreprise non communiquée'],
             'jobLocation' => ['@type' => 'Place', 'address' => ['@type' => 'PostalAddress', 'addressLocality' => $j['city'], 'postalCode' => $j['postal'], 'addressRegion' => $reg[1], 'addressCountry' => 'FR']],
             'identifier' => ['@type' => 'PropertyValue', 'name' => $j['src'], 'value' => $j['id']], 'directApply' => false];
-        if (str_starts_with((string)$j['id'], 'csp-') && function_exists('csp_tables')) { // emploi public : employeur, département et date limite réels
+        if (str_starts_with((string)($j['id'] ?? ''), 'csp-') && function_exists('csp_tables')) { // emploi public : employeur, département et date limite réels
             csp_tables($db); $cm = $db->prepare('SELECT employeur, dep_name, deadline FROM csp_meta WHERE id=?'); $cm->execute([$j['id']]);
             if ($cm = $cm->fetch()) {
                 if ($cm['employeur']) $posting['hiringOrganization']['name'] = $cm['employeur'];
@@ -597,14 +690,12 @@ function page_job(array $site, string $slug): ?string
                 if ($cm['deadline']) $posting['validThrough'] = $cm['deadline'] . 'T23:59:00+02:00';
             }
         } elseif ($j['city'] === '') unset($posting['jobLocation']['address']['addressLocality']);
-        if (empty($posting['validThrough'])) { // fin estimée = publication + 60 j, toujours dans le futur tant que l'offre est ouverte
-            $vt = max(strtotime(substr($j['created_at'], 0, 10) . ' +60 days'), strtotime('today +30 days'));
-            $posting['validThrough'] = date('Y-m-d', $vt) . 'T23:59:00' . date('P', $vt);
-        }
+        // validThrough seulement quand la source fournit une date limite (emploi public) : pas de date estimée qui recule à chaque régénération
         if ($sal = job_salary((string)$j['salary'])) {
             $posting['baseSalary'] = ['@type' => 'MonetaryAmount', 'currency' => 'EUR', 'value' => ['@type' => 'QuantitativeValue', 'unitText' => $sal['unit']]
                 + ($sal['min'] == $sal['max'] ? ['value' => $sal['min']] : ['minValue' => $sal['min'], 'maxValue' => $sal['max']])];
         }
+        if (function_exists('jd_schema')) $posting = jd_schema($j, $posting);
         $schema[] = $posting;
     }
     return layout($site, [
@@ -617,7 +708,7 @@ function page_job(array $site, string $slug): ?string
 function out_sitemap_jobs(array $site, int $i): void
 {
     $db = jobs_db($site['host']);
-    $st = $db->prepare("SELECT slug, created_at FROM jobs WHERE status='open' AND " . JOB_INDEXABLE_SQL . " ORDER BY created_at DESC LIMIT 1000 OFFSET ?");
+    $st = $db->prepare("SELECT slug, max(created_at, COALESCE(updated_at, '')) AS lastmod FROM jobs WHERE status='open' AND " . JOB_INDEXABLE_SQL . " ORDER BY created_at DESC LIMIT 1000 OFFSET ?");
     $st->execute([($i - 1) * 1000]);
     header('Content-Type: application/xml; charset=utf-8');
     echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
@@ -633,7 +724,7 @@ function out_sitemap_jobs(array $site, int $i): void
         jobs_cities_ready($db);
         foreach ($db->query('SELECT slug, updated FROM job_cities ORDER BY n DESC') as $c) echo '<url><loc>https://' . $site['host'] . '/offres-emploi/ville/' . h($c['slug']) . '/</loc><lastmod>' . substr((string)$c['updated'], 0, 10) . '</lastmod></url>';
     }
-    foreach ($st as $r) echo '<url><loc>https://' . $site['host'] . '/offre/' . h($r['slug']) . '/</loc><lastmod>' . substr($r['created_at'], 0, 10) . '</lastmod></url>';
+    foreach ($st as $r) echo '<url><loc>https://' . $site['host'] . '/offre/' . h($r['slug']) . '/</loc><lastmod>' . substr($r['lastmod'], 0, 10) . '</lastmod></url>';
     echo '</urlset>';
 }
 
@@ -649,7 +740,7 @@ function job_summary(array $j, array $facts, string $rel): string
     $ini = mb_strtoupper(mb_substr($co ?: (string)$j['title'], 0, 1));
     $hue = hexdec(substr(md5($co ?: (string)$j['title']), 0, 2)) * 360 / 255;
     $ck = (string)$j['contract'];
-    $tags = '<span class="tag t-' . h($ck ?: 'autre') . '">' . h(JOB_CONTRACTS[$ck] ?? 'Offre') . '</span>' . (str_starts_with((string)$j['id'], 'csp-') ? '<span class="tag t-pub">Emploi public</span>' : '');
+    $tags = '<span class="tag t-' . h($ck ?: 'autre') . '">' . h(JOB_CONTRACTS[$ck] ?? 'Offre') . '</span>' . (str_starts_with((string)($j['id'] ?? ''), 'csp-') ? '<span class="tag t-pub">Emploi public</span>' : '');
     $dl = '';
     foreach ($facts as $k => $v) if ($v !== '' && $v !== null) $dl .= '<div><dt>' . h($k) . '</dt><dd>' . ($k === 'Entreprise' && str_starts_with((string)$v, '<a ') ? $v : h((string)$v)) . '</dd></div>'; // lien vers la page entreprise
     return '<div class="jsum"><div class="jsum-h"><span class="jc-logo" style="background:hsl(' . (int)$hue . ',55%,42%)" aria-hidden="true">' . h($ini) . '</span><div>'

@@ -17,7 +17,8 @@ function fr_map(array $counts, string $prefix, string $unit = 'offres'): string
         [$slug, $name] = JOB_REGIONS[$code];
         $n = (int)($counts[$code] ?? 0);
         $op = $n ? 0.18 + 0.72 * (log(1 + $n) / log(1 + $max)) : 0.06;
-        $paths .= '<a href="' . h($prefix . $slug . '/') . '" aria-label="' . h($name . ' : ' . $nf($n) . ' ' . $unit) . '"><path d="' . $r['d'] . '" fill-opacity="' . round($op, 2) . '"><title>' . h($name . ' — ' . $nf($n) . ' ' . $unit) . '</title></path></a>';
+        $pth = '<path d="' . $r['d'] . '" fill-opacity="' . round($op, 2) . '"><title>' . h($name . ' — ' . $nf($n) . ' ' . $unit) . '</title></path>';
+        $paths .= $n ? '<a href="' . h($prefix . $slug . '/') . '" aria-label="' . h($name . ' : ' . $nf($n) . ' ' . $unit) . '">' . $pth . '</a>' : $pth; // pas de lien vers une région vide (page 404)
         if ($n) $labels .= '<text x="' . $r['cx'] . '" y="' . $r['cy'] . '">' . h($short($n)) . '</text>';
     }
     $drom = [];

@@ -24,6 +24,7 @@ function admin_main(string $path): void
         case $route === 'settings': admin_settings(); return;
         case $route === 'log': admin_log(); return;
         case $route === 'niches': admin_niches(); return;
+        case $route === 'affiliation': admin_affiliation(); return;
         case $route === 'stats': admin_stats(); return;
         case (bool)preg_match('#^stats/([a-z0-9.\-]+)$#', $route, $m): admin_stats_site($m[1]); return;
         case (bool)preg_match('#^site/([a-z0-9.\-]+)(?:/(edit|delete|topics|toggle|run))?$#', $route, $m):
@@ -77,7 +78,7 @@ table{border-collapse:collapse;width:100%;background:#fff;font-size:.9rem}th,td{
 textarea{min-height:90px}button,.btn{background:#0b6e4f;color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer;font:inherit;text-decoration:none;display:inline-block}.btn.g{background:#6c757d}.btn.r,button.r{background:#b32d2e}
 .err{color:#b32d2e;font-weight:600}.ok{color:#0b6e4f;font-weight:600}.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.78rem;background:#e7f3ee;color:#0b6e4f}.tag.off{background:#fbeaea;color:#b32d2e}
 .kpi{display:flex;gap:14px;flex-wrap:wrap}.kpi div{background:#fff;border:1px solid #e3e5e8;border-radius:10px;padding:12px 18px}.kpi b{display:block;font-size:1.5rem}.inline{display:inline}.inline button{padding:4px 10px;font-size:.85rem}
-</style></head><body>' . ($nav ? '<div class="top"><b>🏭 Fabrique à sites</b><a href="/_admin/">Sites</a><a href="/_admin/stats">📊 Statistiques</a><a href="/_admin/new">+ Ajouter un site</a><a href="/_admin/niches">Idées de niches</a><a href="/_admin/log">Journal</a><a href="/_admin/settings">Réglages</a><a href="/_admin/logout">Quitter</a></div>' : '')
+</style></head><body>' . ($nav ? '<div class="top"><b>🏭 Fabrique à sites</b><a href="/_admin/">Sites</a><a href="/_admin/stats">📊 Statistiques</a><a href="/_admin/new">+ Ajouter un site</a><a href="/_admin/niches">Idées de niches</a><a href="/_admin/affiliation">💶 Affiliation</a><a href="/_admin/log">Journal</a><a href="/_admin/settings">Réglages</a><a href="/_admin/logout">Quitter</a></div>' : '')
         . '<div class="w"><h1>' . h($title) . '</h1>' . $body . '</div></body></html>';
 }
 
@@ -316,4 +317,57 @@ function cpanel_del_subdomain(string $host): string
     $bin = is_executable('/usr/local/cpanel/bin/cpapi2') ? '/usr/local/cpanel/bin/cpapi2' : 'cpapi2';
     $out = @shell_exec($bin . ' --output=json SubDomain delsubdomain domain=' . escapeshellarg($host) . ' 2>&1');
     return str_contains((string)$out, '"result":1') ? 'sous-domaine supprimé' : 'suppression cPanel à vérifier';
+}
+
+// ---------- Affiliation : services, identifiants, scripts installés ----------
+
+const AFF_FIELDS = ['nom' => 'Service', 'reseau' => 'Réseau / plateforme', 'statut' => 'Statut', 'identifiant' => 'Identifiant(s)', 'sites' => 'Sites concernés',
+    'remuneration' => 'Rémunération', 'integration' => 'Intégration sur le site', 'url' => 'Tableau de bord (URL)', 'notes' => 'Notes / prochaine étape'];
+const AFF_STATUTS = ['actif' => 'Actif', 'attente' => 'En attente', 'a_faire' => 'À faire', 'refuse' => 'Refusé', 'pause' => 'En pause'];
+
+function aff_list(): array { return json_decode((string)setting('affiliates', '[]'), true) ?: []; }
+function aff_save(array $l): void { setting_set('affiliates', json_encode(array_values($l), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); }
+
+function admin_affiliation(): void
+{
+    $l = aff_list(); $msg = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $a = (string)($_POST['a'] ?? '');
+        if ($a === 'save') {
+            $i = (int)($_POST['i'] ?? -1); $row = ['id' => $l[$i]['id'] ?? bin2hex(random_bytes(4)), 'maj' => date('Y-m-d')];
+            foreach (array_keys(AFF_FIELDS) as $k) $row[$k] = trim((string)($_POST[$k] ?? ''));
+            if (!isset(AFF_STATUTS[$row['statut']])) $row['statut'] = 'a_faire';
+            if ($row['nom'] !== '') { if ($i >= 0 && isset($l[$i])) $l[$i] = $row; else $l[] = $row; aff_save($l); $msg = '<p class="ok">Enregistré.</p>'; }
+        } elseif ($a === 'del' && isset($l[(int)$_POST['i']])) { array_splice($l, (int)$_POST['i'], 1); aff_save($l); $msg = '<p class="ok">Supprimé.</p>'; }
+        elseif ($a === 'head') {
+            $h = (string)($_POST['host'] ?? '');
+            if (site_by_host($h)) { setting_set('head_html:' . $h, trim((string)($_POST['html'] ?? ''))); cache_clear($h); $msg = '<p class="ok">Scripts de ' . h($h) . ' enregistrés (cache vidé).</p>'; }
+        }
+    }
+    $edit = isset($_GET['e']) ? (int)$_GET['e'] : null;
+    $tag = fn($st) => '<span class="tag' . (in_array($st, ['refuse', 'pause', 'a_faire'], true) ? ' off' : '') . '">' . h(AFF_STATUTS[$st] ?? $st) . '</span>';
+    $t = '<table><tr><th>Service</th><th>Statut</th><th>Identifiant(s)</th><th>Sites</th><th>Rémunération</th><th>Intégration</th><th>Notes</th><th></th></tr>';
+    foreach ($l as $i => $r) {
+        $t .= '<tr><td><strong>' . h($r['nom']) . '</strong><br><small>' . h($r['reseau']) . '</small>' . ($r['url'] ? '<br><a href="' . h($r['url']) . '" target="_blank" rel="noopener">tableau de bord ↗</a>' : '') . '</td><td>' . $tag($r['statut']) . '<br><small>' . h($r['maj'] ?? '') . '</small></td>'
+            . '<td><code>' . nl2br(h($r['identifiant'])) . '</code></td><td>' . nl2br(h($r['sites'])) . '</td><td>' . nl2br(h($r['remuneration'])) . '</td><td>' . nl2br(h($r['integration'])) . '</td><td>' . nl2br(h($r['notes'])) . '</td>'
+            . '<td><a class="btn g" href="/_admin/affiliation?e=' . $i . '#f">Modifier</a><form method="post" class="inline" onsubmit="return confirm(\'Supprimer ?\')">' . csrf() . '<input type="hidden" name="a" value="del"><input type="hidden" name="i" value="' . $i . '"><button class="r">×</button></form></td></tr>';
+    }
+    $t .= '</table>';
+    $cur = $edit !== null && isset($l[$edit]) ? $l[$edit] : [];
+    $f = '<form method="post" class="box" id="f">' . csrf() . '<input type="hidden" name="a" value="save"><input type="hidden" name="i" value="' . ($cur ? $edit : -1) . '"><h2 style="margin-top:0">' . ($cur ? 'Modifier « ' . h($cur['nom']) . ' »' : 'Ajouter un service') . '</h2><div class="row">';
+    foreach (AFF_FIELDS as $k => $lab) {
+        if ($k === 'statut') { $f .= '<label>' . $lab . '<select name="statut">' . implode('', array_map(fn($v, $n) => '<option value="' . $v . '"' . (($cur['statut'] ?? 'a_faire') === $v ? ' selected' : '') . '>' . $n . '</option>', array_keys(AFF_STATUTS), AFF_STATUTS)) . '</select></label>'; continue; }
+        $f .= in_array($k, ['notes', 'integration', 'identifiant', 'sites', 'remuneration'], true) ? '<label>' . $lab . '<textarea name="' . $k . '" style="min-height:70px">' . h($cur[$k] ?? '') . '</textarea></label>' : '<label>' . $lab . '<input name="' . $k . '" value="' . h($cur[$k] ?? '') . '"></label>';
+    }
+    $f .= '</div><button>Enregistrer</button>' . ($cur ? ' <a class="btn g" href="/_admin/affiliation">Annuler</a>' : '') . '</form>';
+    // scripts tiers injectés dans l'en-tête, site par site
+    $hs = '';
+    foreach (registry()->query("SELECT host FROM sites WHERE status<>'deleted' ORDER BY host")->fetchAll(PDO::FETCH_COLUMN) as $h) {
+        $v = (string)setting('head_html:' . $h, '');
+        if ($v === '' && ($_GET['site'] ?? '') !== $h) continue;
+        $hs .= '<form method="post" class="box">' . csrf() . '<input type="hidden" name="a" value="head"><input type="hidden" name="host" value="' . h($h) . '"><label>' . h($h) . ' — code inséré dans &lt;head&gt; de toutes les pages<textarea name="html" style="min-height:110px;font-family:monospace;font-size:.8rem">' . h($v) . '</textarea></label><button>Enregistrer</button></form>';
+    }
+    $opts = implode('', array_map(fn($h) => '<option>' . h($h) . '</option>', registry()->query("SELECT host FROM sites WHERE status<>'deleted' ORDER BY host")->fetchAll(PDO::FETCH_COLUMN)));
+    $hs .= '<form method="get" class="box"><label>Ajouter des scripts sur un autre site<select name="site">' . $opts . '</select></label><button>Ouvrir</button></form>';
+    admin_page('Affiliation et régies', $msg . '<p>Tous les programmes d\'affiliation et régies publicitaires de la fabrique, avec leurs identifiants et leur intégration.</p>' . $t . $f . '<h2>Scripts installés dans l\'en-tête des sites</h2>' . $hs);
 }

@@ -6,11 +6,11 @@
 const COMPANY_MIN_CITY = 5;   // offres minimales dans une ville pour une page « X recrute à Ville »
 const COMPANY_INDEX_MAX = 400; // entreprises listées sur /recruteur/
 
-function company_short(string $co): string { return trim(preg_replace('/\s+—\s+.*$/u', '', $co)); }
+function company_short(string|int $co): string { $co = (string)$co; return trim(preg_replace('/\s+—\s+.*$/u', '', $co)); }
 // Nom affiché : « RANDSTAD » → « Randstad » (la base garde la graphie d'origine, utilisée pour les requêtes)
-function company_display(string $co): string { $s = company_short($co); return (mb_strlen($s) > 3 && $s === mb_strtoupper($s)) ? mb_convert_case(mb_strtolower($s), MB_CASE_TITLE, 'UTF-8') : $s; }
-function company_slug(string $co): string { return slugify(company_short($co), 60); }
-function company_is_real(string $co): bool { $s = company_short($co); return $s !== '' && !str_contains($co, '—') && !preg_match('/^communes?\b|non communiqu/iu', $s); }
+function company_display(string|int $co): string { $s = company_short($co); return (mb_strlen($s) > 3 && $s === mb_strtoupper($s)) ? mb_convert_case(mb_strtolower($s), MB_CASE_TITLE, 'UTF-8') : $s; }
+function company_slug(string|int $co): string { return slugify(company_short($co), 60); }
+function company_is_real(string|int $co): bool { $co = (string)$co; $s = company_short($co); return $s !== '' && !str_contains($co, '—') && !preg_match('/^communes?\b|non communiqu/iu', $s); }
 
 function company_tables(PDO $db): void
 {
@@ -34,7 +34,7 @@ function companies_build(PDO $db): int
         $n = (int)$r['n'];
         if ($r['status'] !== 'open') { $c['n_closed'] += $n; continue; }
         $c['n'] += $n;
-        if ($r['city'] !== '') { $k = job_city_norm((string)$r['city']); $c['cities'][$k] = ($c['cities'][$k] ?? 0) + $n; }
+        if ($r['city'] !== '') { $k = job_city_norm((string)$r['city']); if (trim($k) !== '') $c['cities'][$k] = ($c['cities'][$k] ?? 0) + $n; }
         if ($r['sector'] !== '') $c['sectors'][$r['sector']] = ($c['sectors'][$r['sector']] ?? 0) + $n;
         if ($r['contract'] !== '') $c['contracts'][$r['contract']] = ($c['contracts'][$r['contract']] ?? 0) + $n;
         if (isset(JOB_REGIONS[$r['region']])) $c['regions'][$r['region']] = ($c['regions'][$r['region']] ?? 0) + $n;
@@ -65,6 +65,7 @@ function company_get(PDO $db, string $slug): ?array
     $st = $db->prepare('SELECT * FROM job_companies WHERE slug=?'); $st->execute([$slug]);
     if (!$c = $st->fetch()) return null;
     foreach (['cities', 'sectors', 'contracts', 'regions'] as $k) $c[$k] = json_decode((string)$c[$k], true) ?: [];
+    $c['cities'] = array_filter($c['cities'], fn($v, $cn) => trim((string)$cn) !== '', ARRAY_FILTER_USE_BOTH); // ville vide = URL fantôme /article/
     return $c;
 }
 
@@ -144,13 +145,15 @@ function page_company(array $site, string $slug, string $citySlug = ''): string
         $sim = [];
         if ($sect) { $st = $db->prepare("SELECT * FROM jobs WHERE status='open' AND sector=? ORDER BY created_at DESC LIMIT 12"); $st->execute([$sect]); $sim = $st->fetchAll(); }
         if (count($sim) < 6 && $reg) { $st = $db->prepare("SELECT * FROM jobs WHERE status='open' AND region=? ORDER BY created_at DESC LIMIT 12"); $st->execute([$reg]); $sim = array_merge($sim, $st->fetchAll()); }
-        $body = $crumbs . '<h1>' . h($name) . ' : offres d\'emploi</h1>'
+        $hist = function_exists('comp_history_html') && !$city ? comp_history_html($db, $c) : '';
+        $body = $crumbs . '<h1>' . h($name) . ' : offres d\'emploi</h1>' . $hist
             . '<p class="lead">' . h($name) . ' n\'a pas d\'offre d\'emploi publiée en ce moment' . $where . '. ' . ($c['n_closed'] ? 'Cet employeur a publié ' . $nf($c['n_closed']) . ' offres au cours des douze derniers mois ; ' : '') . 'voici des offres proches encore ouvertes.</p>'
             . job_grid($site, array_slice($sim, 0, 12))
             . '<p><a href="/recruteur/">Toutes les entreprises qui recrutent</a> · <a href="/offres-emploi/">Toutes les offres d\'emploi</a></p>' . jobs_disclaimer();
         return layout($site, ['title' => h($name) . ' recrutement : offres d\'emploi | ' . $site['name'], 'desc' => $name . ' : pas d\'offre d\'emploi ouverte actuellement. Offres proches et entreprises du même secteur qui recrutent.', 'robots' => 'noindex,follow', 'canonical' => 'https://' . $site['host'] . $base], $body);
     }
 
+    $fc = job_contract_filter(); if ($fc !== '' && !job_filter_contract($jobs, $fc)) $fc = '';
     $contracts = []; $cities = []; $sal = []; $sectors = [];
     foreach ($jobs as $j) {
         $contracts[$j['contract'] ?: 'autre'] = ($contracts[$j['contract'] ?: 'autre'] ?? 0) + 1;
@@ -184,12 +187,14 @@ function page_company(array $site, string $slug, string $citySlug = ''): string
     if ($topC) $faq[] = ["Quels types de contrat propose $name ?", implode(', ', array_map(fn($k, $v) => (JOB_CONTRACTS[$k] ?? ucfirst($k)) . ' (' . $v . ')', array_keys($contracts), $contracts)) . '.'];
 
     $body = $crumbs . '<h1>' . h($name) . ' recrute' . h($where) . ' : ' . $nf($n) . ' offre' . ($n > 1 ? 's' : '') . ' d\'emploi</h1>' . $intro . $kpi
-        . '<h2>Offres d\'emploi ' . h($name) . h($where) . '</h2>' . job_grid($site, $jobs)
+        . (function_exists('pd_company_html') && !$city ? pd_company_html($db, $c) : '')
+        . '<h2 id="offres">Offres d\'emploi ' . h($name) . h($where) . ($fc ? ' en ' . h(JOB_CONTRACTS[$fc]) . ' (' . count(job_filter_contract($jobs, $fc)) . ')' : '') . '</h2>' . job_grid($site, job_filter_contract($jobs, $fc))
         . ($cityRows ? '<h2>Où ' . h($name) . ' recrute</h2>' . count_chips($cityRows) : '')
-        . (count($contracts) > 1 ? '<h2>Types de contrat</h2>' . count_chips(array_map(fn($k, $v) => [JOB_CONTRACTS[$k] ?? ucfirst($k), $v, ''], array_keys($contracts), $contracts)) : '')
+        . (count($contracts) > 1 ? '<h2>Types de contrat</h2>' . job_contract_chips(job_contract_counts($jobs), $base, $fc) : '')
+        . (function_exists('comp_history_html') && !$city ? comp_history_html($db, $c) : '')
         . (function_exists('metier_links_for_job') && $jobs ? metier_links_for_job($site, $jobs[0]) : '')
         . '<h2>Questions fréquentes</h2>' . implode('', array_map(fn($f) => '<h3>' . h($f[0]) . '</h3><p>' . h($f[1]) . '</p>', $faq))
-        . '<p><a href="/recruteur/">Toutes les entreprises qui recrutent</a>' . ($topS ? ' · <a href="/offres-emploi/">Toutes les offres d\'emploi</a>' : '') . '</p>' . jobs_disclaimer();
+        . '<p><a href="/recruteur/">Toutes les entreprises qui recrutent</a>' . ($topS ? ' · <a href="/offres-emploi/">Toutes les offres d\'emploi</a>' : '') . '</p>' . (function_exists('careerjet_slot') && $jobs ? careerjet_slot($site, job_cj_kw($jobs[0]), $city ? (string)$city[0] : '') : '') . jobs_disclaimer();
 
     $schema = [breadcrumbs($site, $bc),
         ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => array_map(fn($f) => ['@type' => 'Question', 'name' => $f[0], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f[1]]], $faq)],
@@ -198,7 +203,7 @@ function page_company(array $site, string $slug, string $citySlug = ''): string
     return layout($site, [
         'title' => $name . ' recrutement' . $where . ' : ' . $nf($n) . ' offre' . ($n > 1 ? 's' : '') . ' d\'emploi' . ($topC ? ' ' . (JOB_CONTRACTS[$topC] ?? '') : '') . ' | ' . $site['name'],
         'desc' => mb_strimwidth("$name recrute$where : " . $nf($n) . " offre" . ($n > 1 ? 's' : '') . " d'emploi en cours" . ($topC ? ', surtout en ' . (JOB_CONTRACTS[$topC] ?? $topC) : '') . ($firstCity && !$city ? ", notamment à $firstCity" : '') . ($med ? ', salaire médian ' . $nf(round($med / 10) * 10) . ' €/mois' : '') . '. Postulez directement auprès de l\'employeur.', 0, 158, '…'),
-        'canonical' => 'https://' . $site['host'] . $base, 'schema' => $schema,
+        'canonical' => 'https://' . $site['host'] . $base, 'schema' => $schema, 'robots' => $fc ? 'noindex,follow' : null,
     ], $body);
 }
 
@@ -250,7 +255,7 @@ function out_sitemap_companies(array $site): void
     foreach ($db->query('SELECT slug, cities, updated FROM job_companies WHERE n > 0 ORDER BY n DESC LIMIT 5000') as $r) {
         $lm = substr((string)$r['updated'], 0, 10);
         echo '<url><loc>https://' . $site['host'] . '/recruteur/' . h($r['slug']) . '/</loc><lastmod>' . $lm . '</lastmod></url>';
-        foreach (json_decode((string)$r['cities'], true) ?: [] as $cn => $n) if ($n >= COMPANY_MIN_CITY) echo '<url><loc>https://' . $site['host'] . '/recruteur/' . h($r['slug']) . '/' . h(slugify($cn, 60)) . '/</loc><lastmod>' . $lm . '</lastmod></url>';
+        foreach (json_decode((string)$r['cities'], true) ?: [] as $cn => $n) if ($n >= COMPANY_MIN_CITY && trim((string)$cn) !== '') echo '<url><loc>https://' . $site['host'] . '/recruteur/' . h($r['slug']) . '/' . h(slugify($cn, 60)) . '/</loc><lastmod>' . $lm . '</lastmod></url>';
     }
     echo '</urlset>';
 }
@@ -274,12 +279,22 @@ function xml_cached(array $site, string $key, int $ttl, callable $build): void
 // (régénérer 3 000 fiches à chaque passage de robot saturait le serveur). Les pages clés sont ensuite préchauffées.
 function jobs_cache_refresh(array $site, PDO $db): array
 {
-    $dir = cache_dir($site['host']);
-    $keep = [];
-    foreach ($db->query("SELECT slug FROM jobs WHERE status='open'") as $r) $keep[md5('/offre/' . $r['slug'] . '/?')] = 1;
-    $n = 0; $k = 0;
-    foreach (glob($dir . '/*.html') ?: [] as $f) { if (isset($keep[basename($f, '.html')])) { $k++; continue; } @unlink($f); $n++; }
-    return ['purged' => $n, 'kept' => $k];
+    $h = $site['host'];
+    $keep = []; $drop = [];
+    foreach ($db->query("SELECT slug, status FROM jobs WHERE status='open' OR seen_at > datetime('now','-6 days')") as $r) {
+        $b = basename(cache_key($h, '/offre/' . $r['slug'] . '/'), '.html');
+        if ($r['status'] === 'open') $keep[$b] = 1; else $drop[$b] = 1;
+    }
+    $s = 0; $k = 0; $d = 0;
+    foreach (glob(cache_dir($h) . '/*.html') ?: [] as $f) {
+        $b = basename($f, '.html');
+        if (isset($keep[$b])) { $k++; continue; }
+        if (isset($drop[$b])) { @unlink($f); $d++; continue; } // offre fermée : la page doit passer en 410
+        @touch($f, 1); $s++; // listes : périmées, resservies en attendant leur régénération
+    }
+    // Garde-fou : aucune fiche reconnue alors que le cache est plein = clé de cache désynchronisée.
+    if ($k === 0 && $s > 1000) alert_mail($h . ' : aucune fiche reconnue dans le cache', "Synchro jobs : $s pages périmées, 0 fiche d'offre conservée.\nLa clé de cache de jobs_cache_refresh() ne correspond probablement plus à index.php.\nLe site reste servi (cache périmé) mais à vérifier.");
+    return ['stale' => $s, 'kept' => $k, 'dropped' => $d];
 }
 
 function jobs_cache_warm(array $site): int

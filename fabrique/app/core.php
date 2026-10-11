@@ -15,7 +15,7 @@ function cfg(?string $k = null, $def = null)
     return $k === null ? $c : ($c[$k] ?? $def);
 }
 
-function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function now(): string { return gmdate('Y-m-d H:i:s'); }
 
 function pdo_open(string $file): PDO
@@ -23,7 +23,7 @@ function pdo_open(string $file): PDO
     $new = !is_file($file);
     if ($new && !is_dir(dirname($file))) mkdir(dirname($file), 0750, true);
     $db = new PDO('sqlite:' . $file, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-    $db->exec('PRAGMA busy_timeout=8000; PRAGMA synchronous=NORMAL;'); if (strtolower((string)$db->query('PRAGMA journal_mode')->fetchColumn()) !== 'wal') $db->exec('PRAGMA journal_mode=WAL'); // ne redemande pas le mode WAL à chaque connexion (« database is locked » pendant les écritures)
+    $db->exec('PRAGMA busy_timeout=' . (PHP_SAPI === 'cli' ? 8000 : 20000) . '; PRAGMA synchronous=NORMAL;'); // web : 20 s pour absorber le point de contrôle WAL en fin d'import if ($new) { try { $db->exec('PRAGMA journal_mode=WAL'); } catch (Throwable $e) {} } // WAL est persistant : on ne le (re)demande qu'à la création, sinon verrou exclusif pendant les imports (« database is locked » = erreurs 500) // ne redemande pas le mode WAL à chaque connexion (« database is locked » pendant les écritures)
     return $db;
 }
 
@@ -145,9 +145,39 @@ function build_path(array $site, string $slug, string $date): string
 }
 
 function cache_dir(string $host): string { return cfg('data_dir') . '/cache/' . $host; }
+const CACHE_TTL = 86400;
+const CACHE_REGEN_SLOTS = 4;
+// Clé de cache UNIQUE, utilisée par index.php ET par toutes les purges (une clé calculée à deux endroits = panne du 06/10/2026).
+function cache_key(string $host, string $path, string $contrat = '', string $niveau = ''): string
+{
+    return cache_dir($host) . '/' . md5($path . '?' . $contrat . '|' . $niveau) . '.html';
+}
+// Purge douce : les pages sont périmées (date ramenée à 1970), jamais supprimées.
+// index.php sert la version périmée tant qu'aucun créneau de régénération n'est libre : le cache n'est jamais froid.
 function cache_clear(string $host): void
 {
-    foreach (glob(cache_dir($host) . '/*.html') ?: [] as $f) @unlink($f);
+    foreach (glob(cache_dir($host) . '/*.html') ?: [] as $f) @touch($f, 1);
+}
+function cache_is_fresh(string $f): bool { return filemtime($f) > time() - CACHE_TTL; }
+// Limite les régénérations simultanées de pages périmées (verrou relâché automatiquement en fin de requête).
+function cache_regen_slot()
+{
+    $d = cfg('data_dir') . '/cache';
+    for ($i = 0; $i < CACHE_REGEN_SLOTS; $i++) {
+        $h = @fopen("$d/.regen-$i.lock", 'c');
+        if ($h && flock($h, LOCK_EX | LOCK_NB)) return $h;
+        if ($h) fclose($h);
+    }
+    return null;
+}
+// Alerte mail via le serveur (au plus une par sujet toutes les 6 h).
+function alert_mail(string $subject, string $body): void
+{
+    $f = cfg('data_dir') . '/alert-' . md5($subject) . '.stamp';
+    if (is_file($f) && filemtime($f) > time() - 21600) return;
+    @touch($f);
+    @mail('e.guenver@gmail.com', '=?UTF-8?B?' . base64_encode('[FABRIQUE] ' . $subject) . '?=', $body,
+        "From: surveillance@guenver.com\r\nContent-Type: text/plain; charset=UTF-8");
 }
 
 function is_bot(): bool
