@@ -561,6 +561,7 @@ function page_jobs_city(array $site, string $slug): string
         . job_ad($site)
         . '<h2 id="offres">' . ($fc || $jfa ? 'Offres' . ($fc ? ' en ' . h(JOB_CONTRACTS[$fc]) : ' sélectionnées') . ' à ' . h($name) . ' (' . count($jobsF) . ')' : 'Dernières offres d\'emploi à ' . h($name)) . '</h2>' . (function_exists('jf_form') ? jf_form($base . '#offres', ['nosect' => false]) : '') . ($jobsF ? job_grid($site, array_slice($jobsF, 0, $fc || $jfa ? 60 : 30)) : jf_empty())
         . '<p><a href="/offres-emploi/' . h($reg[0]) . '/">Toutes les offres d\'emploi en ' . h($reg[1]) . '</a></p>'
+        . (!$jfa && ($mcRows = (function () use ($db, $slug) { try { $q = $db->prepare('SELECT mc.mslug, m.name, mc.n FROM job_metier_cities mc JOIN job_metiers m ON m.slug=mc.mslug WHERE mc.cslug=? ORDER BY mc.n DESC LIMIT 24'); $q->execute([$slug]); return $q->fetchAll(); } catch (Throwable $e) { return []; } })()) ? '<h2>Métiers qui recrutent à ' . h($name) . '</h2>' . count_chips(array_map(fn($r) => [$r['name'], $r['n'], '/emploi/' . $r['mslug'] . '/' . $slug . '/'], $mcRows)) : '')
         . (function_exists('pd_city_html') && !$jfa ? pd_city_html($db, $c) : '')
         . '<h2>Questions fréquentes</h2>' . implode('', array_map(fn($f) => '<h3>' . h($f[0]) . '</h3><p>' . h($f[1]) . '</p>', $faq))
         . ($others ? '<h2>Autres villes qui recrutent en ' . h($reg[1]) . '</h2><p>' . city_links($others) . '.</p>' : '')
@@ -646,7 +647,9 @@ function page_job(array $site, string $slug): ?string
     $salM = (($sx = job_salary((string)$j['salary'])) && ($mx = job_salary_monthly($sx)) > 900 && $mx < 20000) ? number_format(round($mx / 10) * 10, 0, ',', ' ') . ' €/mois' : '';
     $ctr = JOB_CONTRACTS[$j['contract']] ?? '';
     $seoTitle = mb_substr($j['title'], 0, 55) . ($ctr ? ' – ' . $ctr : '') . ($j['city'] !== '' ? ' à ' . $j['city'] : '') . ($salM ? ' – ' . $salM : '');
-    $cityHtml = $city ? '<p><a href="/offres-emploi/ville/' . h($city['slug']) . '/">Toutes les offres d\'emploi à ' . h($city['name']) . '</a> (' . (int)$city['n'] . ' offres, salaires et secteurs qui recrutent)</p>' : '';
+    $cspHtml = '';
+    if (!$closed && str_starts_with((string)$j['id'], 'csp-') && function_exists('csp_tables') && function_exists('csp_dep_slug')) { try { csp_tables($db); $cq = $db->prepare('SELECT dep_name FROM csp_meta WHERE id=?'); $cq->execute([$j['id']]); if ($dn = (string)$cq->fetchColumn()) $cspHtml = '<p><a href="/emploi-public/departement/' . h(csp_dep_slug($dn)) . '/">Toutes les offres d\'emploi public en ' . h($dn) . '</a> · <a href="/emploi-public/">Emploi public en France</a></p>'; } catch (Throwable $e) {} }
+    $cityHtml = $cspHtml . ($city ? '<p><a href="/offres-emploi/ville/' . h($city['slug']) . '/">Toutes les offres d\'emploi à ' . h($city['name']) . '</a> (' . (int)$city['n'] . ' offres, salaires et secteurs qui recrutent)</p>' : '');
     $desc = trim((string)$j['description']);
     if (function_exists('jx_clean')) $desc = jx_clean($desc);
     $trunc = !$closed && $desc !== '' && function_exists('jx_truncated') && jx_truncated($j);
@@ -722,7 +725,7 @@ function out_sitemap_jobs(array $site, int $i): void
             foreach (array_keys(CSP_VERSANTS) as $v) echo '<url><loc>https://' . $site['host'] . '/emploi-public/versant/' . $v . '/</loc><lastmod>' . $today . '</lastmod></url>';
         }
         jobs_cities_ready($db);
-        foreach ($db->query('SELECT slug, updated FROM job_cities ORDER BY n DESC') as $c) echo '<url><loc>https://' . $site['host'] . '/offres-emploi/ville/' . h($c['slug']) . '/</loc><lastmod>' . substr((string)$c['updated'], 0, 10) . '</lastmod></url>';
+        foreach ($db->query('SELECT slug, updated FROM job_cities WHERE n >= 5 ORDER BY n DESC') as $c) echo '<url><loc>https://' . $site['host'] . '/offres-emploi/ville/' . h($c['slug']) . '/</loc><lastmod>' . substr((string)$c['updated'], 0, 10) . '</lastmod></url>';
     }
     foreach ($st as $r) echo '<url><loc>https://' . $site['host'] . '/offre/' . h($r['slug']) . '/</loc><lastmod>' . substr($r['lastmod'], 0, 10) . '</lastmod></url>';
     echo '</urlset>';
