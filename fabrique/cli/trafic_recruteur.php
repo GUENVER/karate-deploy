@@ -77,6 +77,8 @@ if ($mode === 'report') {
             . "Erreurs 404 : " . $rs('err_404') . "  ·  erreurs 5xx : " . $rs('err_5xx') . "  ·  aperçus Meta refusés : " . $rs('meta_apercu_403') . "\n";
         if ($rs('err_5xx') > 200) $alert .= ' — ALERTE erreurs 5xx';
     }
+    // pages vues des nouvelles rubriques (cli/rubriques_recruteur.php)
+    if (is_file(__DIR__ . '/rubriques_recruteur.php')) { require_once __DIR__ . '/rubriques_recruteur.php'; $b .= rub_report(); }
     // alertes e-mail et Telegram (app/alerts.php)
     $AL = '/home2/guenver/fabrique/data/alerts.sqlite';
     if (is_file($AL)) {

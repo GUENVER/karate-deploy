@@ -6,7 +6,7 @@ function out_robots(array $site): void
 {
     header('Content-Type: text/plain; charset=utf-8');
     $jobs = !empty($site['jobs']);
-    echo "User-agent: meta-externalagent\nDisallow: /\n\nUser-agent: Baiduspider\nDisallow: /\n\n" . ($jobs ? "User-agent: AhrefsBot\nDisallow: /\n\n" : '') . ($site["host"] === "www.recruteur.eu" ? "User-agent: OAI-SearchBot\nDisallow: /wp-sitemap\nDisallow: /_admin/\nDisallow: /_api/\nDisallow: /recherche/\nDisallow: /_cj\nDisallow: /chercher/\nDisallow: /alerte/\nAllow: /\n\n" : "") . "User-agent: ChatGPT-User\nDisallow: /_admin/\nDisallow: /_api/\nDisallow: /_cj\nAllow: /\n\nUser-agent: *\nDisallow: /_admin/\nDisallow: /_api/\nDisallow: /recherche/\nDisallow: /_cj\nDisallow: /chercher/\nDisallow: /alerte/\nAllow: /\n\nSitemap: https://{$site['host']}/sitemap.xml\n" . ($jobs ? "Sitemap: https://{$site['host']}/sitemap-priorite.xml\n" : '');
+    echo "User-agent: meta-externalagent\nDisallow: /\n\nUser-agent: Baiduspider\nDisallow: /\n\n" . ($jobs ? "User-agent: AhrefsBot\nDisallow: /\n\n" : '') . ($site["host"] === "www.recruteur.eu" ? "User-agent: OAI-SearchBot\nDisallow: /wp-sitemap\nDisallow: /_admin/\nDisallow: /_api/\nDisallow: /recherche/\nDisallow: /_cj\nDisallow: /_ac\nDisallow: /chercher/\nDisallow: /alerte/\nAllow: /\n\n" : "") . "User-agent: ChatGPT-User\nDisallow: /_admin/\nDisallow: /_api/\nDisallow: /_cj\nDisallow: /_ac\nAllow: /\n\nUser-agent: *\nDisallow: /_admin/\nDisallow: /_api/\nDisallow: /recherche/\nDisallow: /_cj\nDisallow: /_ac\nDisallow: /chercher/\nDisallow: /alerte/\nAllow: /\n\nSitemap: https://{$site['host']}/sitemap.xml\n" . ($jobs ? "Sitemap: https://{$site['host']}/sitemap-priorite.xml\n" : '');
 }
 
 function out_ads_txt(): void
@@ -83,6 +83,7 @@ function out_sitemap_pages(array $site): void
         foreach (intent_counts($db) as $k => $n) if ($n >= 5) echo '<url><loc>https://' . $site['host'] . '/' . $k . '/</loc></url>';
         foreach ($db->query("SELECT m.intent, j.region, COUNT(*) n FROM job_intent_map m JOIN jobs j ON j.id=m.id WHERE j.status='open' GROUP BY 1,2 HAVING n>=5") as $r) if (isset(JOB_REGIONS[$r['region']])) echo '<url><loc>https://' . $site['host'] . '/' . $r['intent'] . '/' . JOB_REGIONS[$r['region']][0] . '/</loc></url>';
         if (function_exists('page_proches')) echo '<url><loc>https://' . $site['host'] . '/emploi-pres-de-chez-moi/</loc></url>';
+        if (function_exists('page_simulateur')) echo '<url><loc>https://' . $site['host'] . '/simulateur-salaire-brut-net/</loc></url>';
         if (function_exists('page_outremer')) echo '<url><loc>https://' . $site['host'] . '/emploi-outre-mer/</loc></url>';
         if (function_exists('salreg_sitemap_urls')) foreach (salreg_sitemap_urls($site) as $u) echo '<url><loc>https://' . $site['host'] . $u . '</loc></url>';
         if (function_exists('ew_sitemap_urls')) foreach (ew_sitemap_urls($site) as $u) echo '<url><loc>https://' . $site['host'] . $u . '</loc></url>';

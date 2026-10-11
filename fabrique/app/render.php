@@ -110,7 +110,7 @@ function layout(array $site, array $m, string $body): string
         . '<footer class="bot"><div class="w"><p><strong>' . h($site['name']) . '</strong> — ' . h($site['tagline']) . '</p>'
         . '<p><a href="/a-propos/">À propos</a><a href="/contact/">Contact</a><a href="/mentions-legales/">Mentions légales</a>' . (!empty($site['jobs']) ? '<a href="/nos-sources/">Nos sources</a><a href="/barometre-emploi/">Baromètre de l\'emploi</a>' : '') . '<a href="/confidentialite/">Confidentialité</a><a href="/plan-du-site/">Plan du site</a></p>'
         . (in_array($site['host'], ['www.decouverte.org', 'www.normandie.me', 'camping-car.decouverte.org', 'balades.normandie.me'], true) ? '<p>Voir aussi : <a href="https://bretagne.decouverte.org/">Que faire en Bretagne</a> · <a href="https://bretagne.decouverte.org/agenda/ce-week-end/">sorties ce week-end en Bretagne</a> · <a href="https://bretagne.decouverte.org/iles/">îles bretonnes et horaires des bateaux</a></p>' : '')
-        . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer><script>setTimeout(function(){var d=new FormData();d.append("p",location.pathname);navigator.sendBeacon("/_pv",d)},1500)</script></body></html>';
+        . $amzDisc . '<p>© ' . $year . ' ' . h($site['name']) . '</p></div></footer>' . (!empty($site['jobs']) && function_exists('ac_script') ? ac_script() : '') . '<script>setTimeout(function(){var d=new FormData();d.append("p",location.pathname);navigator.sendBeacon("/_pv",d)},1500)</script></body></html>';
 }
 
 // Menu « Offres d'emploi » déroulant : toutes les offres, régions, grandes villes.
@@ -567,7 +567,7 @@ function jobs_header(array $site, string $lg, string $navJobs): string
     $offres = '<div class="jh-cols"><div><h5>Accès rapide</h5><a href="/offres-emploi/"><strong>Toutes les offres</strong></a>' . ($csp ? '<a href="/emploi-public/">Emploi public</a>' : '') . '<a href="/emploi-pres-de-chez-moi/">Près de chez moi</a><a href="/emploi-frontalier/">Emploi frontalier</a><a href="/emploi-etranger/">Emploi à l\'étranger</a><a href="/emploi-outre-mer/">Emploi en Outre-mer</a><a href="/emploi-saisonnier/">Emplois saisonniers</a><a href="/emploi/">Offres par métier</a><a href="/recruteur/">Entreprises qui recrutent</a><a href="/chercher/">Recherche avancée</a><h5 style="margin-top:14px">Par contrat</h5><a href="/emploi-cdi/">CDI</a><a href="/emploi-cdd/">CDD</a><a href="/interim/">Intérim</a><a href="/alternance/">Alternance</a></div>'
         . ($reg ? '<div><h5>Par région</h5><div class="two">' . $reg . '</div></div>' : '')
         . ($cit ? '<div><h5>Grandes villes</h5><div class="two">' . $cit . '</div></div>' : '') . '</div>';
-    $metiers = '<h5>Métiers</h5><a href="/emploi/">Offres par métier</a><a href="/salaire/">Salaires par métier</a><a href="/barometre-emploi/">Baromètre de l\'emploi</a>';
+    $metiers = '<h5>Métiers</h5><a href="/emploi/">Offres par métier</a><a href="/salaire/">Salaires par métier</a><a href="/simulateur-salaire-brut-net/">Simulateur brut → net</a><a href="/barometre-emploi/">Baromètre de l\'emploi</a>';
 
     $nav = $sub('jh-p1', 'Offres d\'emploi', $offres, ' mega')
         . '<li><a class="jh-i" href="/emploi-pres-de-chez-moi/"' . $cur('/emploi-pres-de-chez-moi/') . '>Près de chez moi</a></li>'
