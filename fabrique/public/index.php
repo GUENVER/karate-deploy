@@ -30,7 +30,7 @@ require dirname(__DIR__) . '/app/enrich.php';
 require dirname(__DIR__) . '/app/rome.php';
 require dirname(__DIR__) . '/app/decode.php';
 require dirname(__DIR__) . '/app/filters.php';
-foreach (['complements', 'depmap', 'pubdata', 'frontalier', 'proches'] as $__m) if (is_file(dirname(__DIR__) . "/app/$__m.php")) require dirname(__DIR__) . "/app/$__m.php";
+foreach (['complements', 'depmap', 'pubdata', 'frontalier', 'proches', 'saison', 'etranger'] as $__m) if (is_file(dirname(__DIR__) . "/app/$__m.php")) require dirname(__DIR__) . "/app/$__m.php";
 
 $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
@@ -236,6 +236,8 @@ function route(array $site, string $path): ?string
         if (preg_match('#^/emploi-public/versant/(etat|territoriale|hospitaliere)/(?:page/(\d+)/)?$#', $path, $m)) return page_emploi_public_list($site, null, $m[1], max(1, (int)($m[2] ?? 1)));
         if (preg_match('#^/emploi-public/([a-z\-]+)/(?:page/(\d+)/)?$#', $path, $m) && ($reg = region_by_slug($m[1]))) return page_emploi_public_list($site, $reg, '', max(1, (int)($m[2] ?? 1)));
         if ($path === '/emploi-pres-de-chez-moi/' && function_exists('page_proches')) return page_proches($site);
+        if (str_starts_with($path, '/emploi-etranger/') && function_exists('ew_route') && ($h = ew_route($site, $path)) !== '') return $h;
+        if (str_starts_with($path, '/emploi-saisonnier/') && function_exists('ss_route') && ($h = ss_route($site, $path)) !== '') return $h;
         if (str_starts_with($path, '/emploi-frontalier/') && function_exists('fx_route') && ($h = fx_route($site, $path)) !== '') return $h;
         if (preg_match('#^/offre/([a-z0-9\-]+)/$#', $path, $m)) return page_job($site, $m[1]);
     }

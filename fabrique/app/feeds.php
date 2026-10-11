@@ -83,6 +83,8 @@ function out_sitemap_pages(array $site): void
         foreach (intent_counts($db) as $k => $n) if ($n >= 5) echo '<url><loc>https://' . $site['host'] . '/' . $k . '/</loc></url>';
         foreach ($db->query("SELECT m.intent, j.region, COUNT(*) n FROM job_intent_map m JOIN jobs j ON j.id=m.id WHERE j.status='open' GROUP BY 1,2 HAVING n>=5") as $r) if (isset(JOB_REGIONS[$r['region']])) echo '<url><loc>https://' . $site['host'] . '/' . $r['intent'] . '/' . JOB_REGIONS[$r['region']][0] . '/</loc></url>';
         if (function_exists('page_proches')) echo '<url><loc>https://' . $site['host'] . '/emploi-pres-de-chez-moi/</loc></url>';
+        if (function_exists('ew_sitemap_urls')) foreach (ew_sitemap_urls($site) as $u) echo '<url><loc>https://' . $site['host'] . $u . '</loc></url>';
+        if (function_exists('ss_sitemap_urls')) foreach (ss_sitemap_urls($site) as $u) echo '<url><loc>https://' . $site['host'] . $u . '</loc></url>';
         if (function_exists('fx_sitemap_urls')) foreach (fx_sitemap_urls($site) as $u) echo '<url><loc>https://' . $site['host'] . $u . '</loc></url>';
         if (function_exists('rub_sitemap_urls')) foreach (rub_sitemap_urls($site) as $u) echo '<url><loc>https://' . $site['host'] . $u . '</loc></url>';
     }

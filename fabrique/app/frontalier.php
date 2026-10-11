@@ -98,7 +98,7 @@ function fx_grid(array $site, array $jobs): string
     if (!$jobs) return '';
     $cards = array_map('fx_card', $jobs);
     if (empty($site['adsense'])) return '<div class="grid">' . implode('', $cards) . '</div>';
-    $out = ''; $chunks = [array_splice($cards, 0, 4)];
+    $out = ''; $chunks = [array_splice($cards, 0, 2)];
     while ($cards) $chunks[] = array_splice($cards, 0, 12);
     foreach ($chunks as $i => $ch) $out .= '<div class="grid">' . implode('', $ch) . '</div>' . ($i < count($chunks) - 1 ? job_ad($site) : '');
     return $out;
@@ -143,7 +143,7 @@ function page_fx_home(array $site): string
     $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/offres-emploi/">Offres d\'emploi</a> › Emploi frontalier</p>'
         . '<h1>Emploi frontalier : Suisse, Luxembourg, Allemagne, Belgique, Espagne</h1>'
         . '<p class="lead">' . $nf($tot) . ' offres d\'emploi ouvertes à Genève, Lausanne, Bâle, Sarrebruck, Karlsruhe, Fribourg-en-Brisgau, Bruxelles, Liège, Tournai, Saint-Sébastien et Gérone, plus les offres du Luxembourg, pour les personnes qui vivent en France près de la frontière. Mise à jour chaque jour.</p>'
-        . $blocks . job_ad($site)
+        . $blocks . (function_exists('ew_route') ? '<p><a href="/emploi-etranger/"><strong>Plus loin : emploi à l\'étranger pour francophones (Royaume-Uni, Canada, Espagne, Italie, Pays-Bas) →</strong></a></p>' : '') . job_ad($site)
         . ($latest ? '<h2>Dernières offres frontalières</h2>' . fx_grid($site, $latest) : '')
         . fx_faq_html($faq)
         . '<p class="disc">Offres Suisse et Belgique : Jobs by Adzuna. Offres Luxembourg : Careerjet. La candidature se fait sur le site d\'origine de l\'offre.</p>';

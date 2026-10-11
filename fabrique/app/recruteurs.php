@@ -96,7 +96,7 @@ function job_grid(array $site, array $jobs, bool $ads = true): string
     if (!$jobs) return '';
     $cards = array_map('job_card', $jobs);
     if (!$ads || !$site['adsense']) return '<div class="grid">' . implode('', $cards) . '</div>';
-    $out = ''; $chunks = [array_splice($cards, 0, 4)];
+    $out = ''; $chunks = [array_splice($cards, 0, 2)];
     while ($cards) $chunks[] = array_splice($cards, 0, 12);
     foreach ($chunks as $i => $ch) $out .= '<div class="grid">' . implode('', $ch) . '</div>' . ($i < count($chunks) - 1 ? job_ad($site) : '');
     return $out;

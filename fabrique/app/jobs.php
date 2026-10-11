@@ -670,6 +670,7 @@ function page_job(array $site, string $slug): ?string
         . ($closed ? '<p class="lead">Cette offre n\'est plus disponible' . ($recent ? ' (pourvue ou retirée par le recruteur le ' . h(date_fr((string)$j['seen_at'])) . ')' : '') . '. Voici des offres similaires encore ouvertes.</p>' . $simHtml . $cityHtml . job_ad($site) : '')
         . (!$closed && function_exists('comp_deadline_line') ? comp_deadline_line($j) : '')
         . job_summary($j, $facts, $closed ? '' : $rel)
+        . (!$closed ? job_near_list($db, $j, $similar) . job_ad($site) : '')
         . ($desc !== '' ? '<section class="jdesc"><h2>Description du poste</h2><div>' . nl2br(h($desc)) . '</div>' . $truncHtml . '</section>' : '')
         . '<p class="disc">Source : ' . h($j['src']) . ($j['src'] === 'Adzuna' ? ' — Jobs by Adzuna' : '') . '. Publiée le ' . h(date_fr($j['created_at'])) . '.' . $fresh . '</p>'
         . ($closed ? '' : job_ad($site) . (function_exists('jd_html') ? jd_html($site, $db, $j, $desc) : '') . (function_exists('metier_links_for_job') ? metier_links_for_job($site, $j) . metier_similar_for_job($site, $j) : '') . (function_exists('lba_job_blocks') ? lba_job_blocks($site, $j) : '') . $simHtml . $cityHtml)
@@ -737,6 +738,24 @@ function jobs_sitemap_count(array $site): int
 }
 
 // Encadré récapitulatif en tête de fiche offre (entreprise, étiquettes, informations clés, bouton Postuler).
+// 6 offres proches (même métier, même ville puis même département), en liste compacte : incite à voir une 2e page.
+function job_near_list(PDO $db, array $j, array $fallback): string
+{
+    $rows = [];
+    try {
+        $st = $db->prepare('SELECT mslug, cslug FROM job_metier_map WHERE id=?'); $st->execute([$j['id']]); $mm = $st->fetch();
+        if ($mm && $mm['mslug'] !== '') {
+            $dep = substr((string)$j['postal'], 0, 2);
+            $st = $db->prepare("SELECT j.slug, j.title, j.city, j.contract FROM job_metier_map m JOIN jobs j ON j.id=m.id WHERE m.mslug=? AND j.status='open' AND j.id<>? ORDER BY (m.cslug=?) DESC, (substr(j.postal,1,2)=?) DESC, (j.region=?) DESC, j.created_at DESC LIMIT 6");
+            $st->execute([$mm['mslug'], $j['id'], (string)$mm['cslug'], $dep, (string)$j['region']]); $rows = $st->fetchAll();
+        }
+    } catch (Throwable $e) {}
+    if (count($rows) < 3) $rows = array_slice($fallback, 0, 6);
+    if (!$rows) return '';
+    $li = implode('', array_map(fn($r) => '<li><a href="/offre/' . h($r['slug']) . '/">' . h($r['title']) . '</a>' . ((string)$r['city'] !== '' ? ' <span>— ' . h($r['city']) . '</span>' : '') . (isset(JOB_CONTRACTS[$r['contract']]) ? ' <span class="tag t-' . h($r['contract']) . '">' . h(JOB_CONTRACTS[$r['contract']]) . '</span>' : '') . '</li>', $rows));
+    return '<section class="jnear" style="margin:18px 0;padding:14px 16px;border:1px solid var(--b);border-radius:10px"><h2 style="margin:0 0 8px;font-size:1.1rem">Offres proches de celle-ci</h2><ul style="margin:0;padding-left:18px;line-height:1.7">' . $li . '</ul></section>';
+}
+
 function job_summary(array $j, array $facts, string $rel): string
 {
     $co = preg_replace('/\s+—\s+.*$/u', '', trim((string)$j['company']));
