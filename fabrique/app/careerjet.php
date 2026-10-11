@@ -23,7 +23,7 @@ function careerjet_endpoint(array $site): void
     if ($key === '' || is_bot()) exit;
     $kw = trim(mb_substr((string)($_GET['k'] ?? ''), 0, 80));
     $loc = trim(mb_substr((string)($_GET['l'] ?? ''), 0, 60));
-    $loc_code = in_array((string)($_GET['c'] ?? ''), ['fr_CH', 'fr_BE', 'fr_LU'], true) ? (string)$_GET['c'] : 'fr_FR';
+    $loc_code = in_array((string)($_GET['c'] ?? ''), ['fr_CH', 'fr_BE', 'fr_LU', 'de_DE', 'es_ES'], true) ? (string)$_GET['c'] : 'fr_FR';
     $dir = cfg('data_dir') . '/cache/careerjet';
     $file = $dir . '/' . md5($kw . '|' . $loc . ($loc_code !== 'fr_FR' ? '|' . $loc_code : '')) . '.json';
     $jobs = null;
@@ -51,6 +51,6 @@ function careerjet_endpoint(array $site): void
     }
     if ($cards === '') exit;
     echo '<h2>Plus d\'offres' . ($loc !== '' ? ' — ' . h($loc) : '') . '</h2><div class="grid">' . $cards . '</div>'
-        . '<p class="disc">Offres complémentaires fournies par <a href="' . ($loc_code === 'fr_FR' ? 'https://www.careerjet.fr/' : 'https://www.optioncarriere.' . strtolower(substr($loc_code, 3)) . '/') . '" rel="nofollow noopener" target="_blank">Careerjet</a>.</p>';
+        . '<p class="disc">Offres complémentaires fournies par <a href="' . (['fr_FR' => 'https://www.careerjet.fr/', 'de_DE' => 'https://www.careerjet.de/', 'es_ES' => 'https://www.careerjet.es/'][$loc_code] ?? 'https://www.optioncarriere.' . strtolower(substr($loc_code, 3)) . '/') . '" rel="nofollow noopener" target="_blank">Careerjet</a>.</p>';
     exit;
 }

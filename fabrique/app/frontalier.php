@@ -13,8 +13,13 @@ const FX_ZONES = [
     'liege' => ['be', 'Liège', 'Liège', 'Belgique', 'Ardennes'],
     'mons' => ['be', 'Mons', 'Mons, Charleroi et La Louvière', 'Belgique', 'Nord'],
     'tournai' => ['be', 'Tournai', 'Tournai et Mouscron', 'Belgique', 'Nord (métropole lilloise)'],
+    'sarrebruck' => ['de', 'Saarbrücken', 'Sarrebruck', 'Allemagne', 'Moselle'],
+    'karlsruhe' => ['de', 'Karlsruhe', 'Karlsruhe et Pays de Bade', 'Allemagne', 'Bas-Rhin'],
+    'fribourg-en-brisgau' => ['de', 'Freiburg', 'Fribourg-en-Brisgau', 'Allemagne', 'Haut-Rhin'],
+    'saint-sebastien' => ['es', 'San Sebastián', 'Saint-Sébastien et Pays basque espagnol', 'Espagne', 'Pyrénées-Atlantiques'],
+    'gerone' => ['es', 'Gerona', 'Gérone et Catalogne', 'Espagne', 'Pyrénées-Orientales'],
 ];
-const FX_COUNTRIES = ['ch' => ['Suisse', 'CHF', 'CH', 'fr_CH'], 'be' => ['Belgique', 'EUR', 'BE', 'fr_BE'], 'lu' => ['Luxembourg', 'EUR', 'LU', 'fr_LU']];
+const FX_COUNTRIES = ['ch' => ['Suisse', 'CHF', 'CH', 'fr_CH'], 'be' => ['Belgique', 'EUR', 'BE', 'fr_BE'], 'lu' => ['Luxembourg', 'EUR', 'LU', 'fr_LU'], 'de' => ['Allemagne', 'EUR', 'DE', 'de_DE'], 'es' => ['Espagne', 'EUR', 'ES', 'es_ES']];
 
 function fx_db(array $site): PDO
 {
@@ -111,6 +116,8 @@ function fx_info(string $cc): string
     $t = [
         'ch' => 'Pour travailler en Suisse en résidant en France, un ressortissant européen obtient un <b>permis G</b> (frontalier), demandé par l\'employeur au canton. Le frontalier doit en principe rentrer à son domicile en France au moins une fois par semaine. Le salaire est versé en francs suisses (CHF) et l\'imposition dépend du canton de travail.',
         'lu' => 'Le Luxembourg est le premier pays d\'emploi des frontaliers lorrains. Aucun permis n\'est nécessaire pour un ressortissant européen. Le salaire est en principe imposé au Luxembourg, avec un nombre limité de jours de télétravail possibles depuis la France.',
+        'de' => 'Aucun permis n\'est nécessaire pour un ressortissant européen. Les frontaliers d\'Alsace et de Moselle qui travaillent en Allemagne relèvent d\'une convention fiscale franco-allemande qui prévoit, sous conditions de résidence et de lieu de travail proches de la frontière, une imposition en France. Les annonces sont généralement rédigées en allemand.',
+        'es' => 'Aucun permis n\'est nécessaire pour un ressortissant européen. Le salaire est en principe imposé en Espagne, et la sécurité sociale relève du pays d\'emploi. Les annonces sont généralement rédigées en espagnol (ou en basque et en catalan).',
         'be' => 'Aucun permis n\'est nécessaire pour un ressortissant européen. Pour les nouveaux frontaliers, le salaire est en principe imposé en Belgique, et la sécurité sociale relève du pays d\'emploi.',
     ];
     return '<div class="box"><h4>Travailler en ' . h(FX_COUNTRIES[$cc][0]) . ' en vivant en France</h4><p>' . $t[$cc] . '</p><p><small>Règles résumées à titre indicatif : vérifiez votre situation auprès de l\'employeur, du centre des impôts ou du réseau EURES avant de vous engager.</small></p></div>';
@@ -124,25 +131,25 @@ function page_fx_home(array $site): string
     $db = fx_db($site); $cnt = fx_counts($db); $tot = array_sum($cnt);
     $nf = fn($x) => number_format((float)$x, 0, ',', ' ');
     $blocks = '';
-    foreach (['ch', 'lu', 'be'] as $cc) {
+    foreach (['ch', 'lu', 'de', 'be', 'es'] as $cc) {
         $items = '';
         foreach (FX_ZONES as $z => $d) if ($d[0] === $cc) $items .= '<li><a href="/emploi-frontalier/' . $z . '/">Emploi ' . h($d[2]) . '</a>' . (isset($cnt[$z]) ? ' (' . $nf($cnt[$z]) . ' offres)' : '') . ' — depuis ' . h($d[4]) . '</li>';
         $blocks .= '<h2>Travailler en ' . h(FX_COUNTRIES[$cc][0]) . '</h2><ul>' . $items . '</ul>';
     }
     $latest = $db->query("SELECT * FROM jobs_x WHERE status='open' ORDER BY created_at DESC LIMIT 12")->fetchAll();
-    $faq = [["Où trouver un emploi frontalier ?", "Les bassins d'emploi frontaliers les plus actifs depuis la France sont Genève et le canton de Vaud (Haute-Savoie, Ain), Bâle (Haut-Rhin), le Luxembourg (Moselle, Meurthe-et-Moselle) et la Belgique (Nord, Ardennes). " . $site['name'] . " regroupe " . $nf($tot) . " offres ouvertes en Suisse et en Belgique, mises à jour chaque jour, ainsi que les offres du Luxembourg."],
+    $faq = [["Où trouver un emploi frontalier ?", "Les bassins d'emploi frontaliers les plus actifs depuis la France sont Genève et le canton de Vaud (Haute-Savoie, Ain), Bâle (Haut-Rhin), le Luxembourg (Moselle, Meurthe-et-Moselle) l'Allemagne (Moselle, Alsace), la Belgique (Nord, Ardennes) et l'Espagne (Pays basque, Pyrénées-Orientales). " . $site['name'] . " regroupe " . $nf($tot) . " offres ouvertes en Suisse, en Allemagne, en Belgique et en Espagne, mises à jour chaque jour, ainsi que les offres du Luxembourg."],
         ["Faut-il un permis pour travailler en Suisse quand on vit en France ?", "Oui : un ressortissant européen qui réside en France et travaille en Suisse obtient un permis G (frontalier), demandé par l'employeur auprès du canton."],
-        ["Comment postuler à une offre frontalière ?", "Chaque offre renvoie vers son site d'origine, où se fait la candidature. Dans la région de Bâle, les annonces sont souvent rédigées en allemand."]];
+        ["Comment postuler à une offre frontalière ?", "Chaque offre renvoie vers son site d'origine, où se fait la candidature. Les annonces de Bâle et d'Allemagne sont souvent rédigées en allemand, celles d'Espagne en espagnol."]];
     $body = '<p class="crumbs" style="margin-top:24px"><a href="/">Accueil</a> › <a href="/offres-emploi/">Offres d\'emploi</a> › Emploi frontalier</p>'
-        . '<h1>Emploi frontalier : Suisse, Luxembourg, Belgique</h1>'
-        . '<p class="lead">' . $nf($tot) . ' offres d\'emploi ouvertes à Genève, Lausanne, Neuchâtel, Bâle, Bruxelles, Liège, Mons et Tournai, plus les offres du Luxembourg, pour les personnes qui vivent en France près de la frontière. Mise à jour chaque jour.</p>'
+        . '<h1>Emploi frontalier : Suisse, Luxembourg, Allemagne, Belgique, Espagne</h1>'
+        . '<p class="lead">' . $nf($tot) . ' offres d\'emploi ouvertes à Genève, Lausanne, Bâle, Sarrebruck, Karlsruhe, Fribourg-en-Brisgau, Bruxelles, Liège, Tournai, Saint-Sébastien et Gérone, plus les offres du Luxembourg, pour les personnes qui vivent en France près de la frontière. Mise à jour chaque jour.</p>'
         . $blocks . job_ad($site)
         . ($latest ? '<h2>Dernières offres frontalières</h2>' . fx_grid($site, $latest) : '')
         . fx_faq_html($faq)
         . '<p class="disc">Offres Suisse et Belgique : Jobs by Adzuna. Offres Luxembourg : Careerjet. La candidature se fait sur le site d\'origine de l\'offre.</p>';
     $schema = [breadcrumbs($site, [['Offres d\'emploi', '/offres-emploi/'], ['Emploi frontalier', '/emploi-frontalier/']]), fx_faq_schema($faq)];
-    return layout($site, ['title' => 'Emploi frontalier Suisse, Luxembourg, Belgique : ' . $nf($tot) . ' offres | ' . $site['name'],
-        'desc' => 'Offres d\'emploi frontalier à Genève, Lausanne, Bâle, Luxembourg, Bruxelles, Liège et Tournai pour les résidents français, mises à jour chaque jour.',
+    return layout($site, ['title' => 'Emploi frontalier Suisse, Luxembourg, Allemagne, Belgique, Espagne : ' . $nf($tot) . ' offres | ' . $site['name'],
+        'desc' => 'Offres d\'emploi frontalier en Suisse, au Luxembourg, en Allemagne, en Belgique et en Espagne pour les résidents français, mises à jour chaque jour.',
         'canonical' => 'https://' . $site['host'] . '/emploi-frontalier/', 'schema' => $schema], $body);
 }
 
