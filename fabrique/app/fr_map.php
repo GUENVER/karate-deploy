@@ -30,7 +30,7 @@ function fr_map(array $counts, string $prefix, string $unit = 'offres'): string
 
 function fr_map_css(): string
 {
-    return '.frmap{margin:18px auto 8px;max-width:620px}.frmap svg{width:100%;height:auto;display:block}'
+    return '.frmap{margin:18px auto 8px;max-width:620px;content-visibility:auto;contain-intrinsic-size:auto 560px}.frmap svg{width:100%;height:auto;display:block}'
         . '.frm-r path{fill:var(--c);stroke:#fff;stroke-width:1.2;transition:fill-opacity .15s}.frm-r a:hover path,.frm-r a:focus path{fill-opacity:1;stroke:#ffb400;stroke-width:2}'
         . '.frm-l text{font:700 13px system-ui,sans-serif;fill:#fff;text-anchor:middle;dominant-baseline:middle;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.35);stroke-width:2px}'
         . '.frmap figcaption{text-align:center;font-size:.85rem;color:var(--m);margin-top:6px}'

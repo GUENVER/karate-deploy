@@ -98,7 +98,7 @@ function layout(array $site, array $m, string $body): string
     $year = gmdate('Y');
     $amzDisc = $site['amazon'] && setting('amazon_tag', '') ? '<p class="disc">En tant que Partenaire Amazon, ' . h($site['name']) . ' réalise un bénéfice sur les achats remplissant les conditions requises. Les liens marqués « Voir sur Amazon » sont des liens d\'affiliation.</p>' : '';
 
-    return '<!doctype html><html lang="' . h($m['lang'] ?? ($site['lang'] ?: 'fr')) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    return '<!doctype html><html lang="' . h($m['lang'] ?? ($site['lang'] ?: 'fr')) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' . (!empty($site['jobs']) ? '<link rel="preload" href="/_m/site/inter-latin.woff2" as="font" type="font/woff2" crossorigin>' : '')
         . $head . '<style>' . css($site) . (!empty($site['jobs']) ? jobs_css() . jobs_header_css() : '') . '</style></head><body' . (!empty($site['jobs']) ? ' class="jobs"' : '') . '>'
         . ($jobsHdr ?: ((function_exists('bzh_header') && !empty($site['bzh'])) ? bzh_header($site) : ((function_exists('nor_header') && nor_on($site)) ? nor_header($site) : (($lg = setting('logo:' . $site['host'], ''))
             ? '<header class="top hl"><div class="w hlw"><a class="hlogo" href="/" aria-label="' . h($site['name']) . ' — accueil"><img src="' . h($lg) . '" alt="' . h($site['name']) . '" width="288" height="70" fetchpriority="high"></a></div>'
@@ -515,9 +515,10 @@ function jobs_css(): string
 {
     return "@font-face{font-family:Inter;font-style:normal;font-weight:400 800;font-display:swap;src:url(/_m/site/inter-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}"
     . "@font-face{font-family:Inter;font-style:normal;font-weight:400 800;font-display:swap;src:url(/_m/site/inter-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}"
+    . "@font-face{font-family:InterFallback;src:local('Arial'),local('Helvetica'),local('Roboto');size-adjust:107%;ascent-override:90.5%;descent-override:22.5%;line-gap-override:0%}"
     . ".jobs{--c:#0055a4;--a:#00b09b;--t:#1a2433;--m:#5e6b7a;--b:#e3e8ef;--s:#f4f7fb}"
-    . "body.jobs{font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:17px;line-height:1.65;background:#fbfcfe}"
-    . ".jobs h1,.jobs h2,.jobs h3{font-family:Inter,system-ui,sans-serif;letter-spacing:-.02em;color:#0f1b2d;line-height:1.25}"
+    . "body.jobs{font-family:Inter,InterFallback,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:17px;line-height:1.65;background:#fbfcfe}"
+    . ".jobs h1,.jobs h2,.jobs h3{font-family:Inter,InterFallback,system-ui,sans-serif;letter-spacing:-.02em;color:#0f1b2d;line-height:1.25}"
     . ".jobs h1{font-size:clamp(1.6rem,3.2vw,2.3rem);font-weight:800;margin:.6em 0 .4em}.jobs h2{font-size:1.35rem;font-weight:750;margin:1.8em 0 .7em;padding-bottom:.35em;border-bottom:2px solid var(--b)}"
     . ".jobs .lead,.jobs main>p:first-of-type{font-size:1.05rem;color:#344255}"
     . ".jobs .crumbs{font-size:.85rem;color:var(--m)}.jobs .crumbs a{color:var(--m)}"
